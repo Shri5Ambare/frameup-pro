@@ -7,7 +7,8 @@
 <meta name="description" content="Create branded profile frames and social graphics in seconds. No Canva, no Photoshop. Your photo never leaves your device.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 </head>
@@ -15,30 +16,54 @@
 
 <!-- ============ AUTH (shown until logged in) ============ -->
 <div id="authOverlay" class="auth-overlay" hidden>
-  <div class="auth-hero">
-    <h1>Put your community<br><span>in the picture.</span></h1>
-    <p>FrameUp lets campaigns, colleges, and festivals create branded profile-picture frames their supporters apply in seconds — no design skills needed.</p>
-    <ul>
-      <li>🖼️ Frame Studio with stickers, logos &amp; arc text</li>
-      <li>🌍 Publish to the community gallery &amp; share one link</li>
-      <li>📈 Track downloads and collect supporter emails</li>
-      <li>🔒 Photos never leave the device — only frames are stored</li>
-    </ul>
-  </div>
-  <div class="auth-card">
-    <h2 id="authTitle">Welcome back</h2>
-    <div class="tabs">
-      <button class="tab selected" id="tabLogin" onclick="setAuthMode('login')">Log in</button>
-      <button class="tab" id="tabSignup" onclick="setAuthMode('signup')">Sign up</button>
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="auth-inner">
+    <div class="auth-hero">
+      <div class="eyebrow reveal">✦ For campaigns, colleges &amp; festivals</div>
+      <h1 class="reveal">Put your community<br><span>in the picture.</span></h1>
+      <p class="reveal">Branded profile-picture frames your supporters apply in seconds — design one in minutes, share a single link, and watch it spread. No Canva, no Photoshop, no design skills.</p>
+      <ul class="hero-feats">
+        <li class="reveal"><span class="fi">🎨</span><div><b>Frame Studio &amp; Custom Builder</b>Rings, arc text, stickers, logos — drag &amp; drop like Canva.</div></li>
+        <li class="reveal"><span class="fi">🌍</span><div><b>Publish &amp; share one link</b>Your frame lands in the community gallery with a QR code.</div></li>
+        <li class="reveal"><span class="fi">📈</span><div><b>Track reach, capture leads</b>See downloads and collect supporter emails per campaign.</div></li>
+        <li class="reveal"><span class="fi">🔒</span><div><b>Private by design</b>Photos never leave the device — only frames are stored.</div></li>
+      </ul>
+      <div class="hero-trust reveal">
+        <div class="ht-avatars"><span>A</span><span>R</span><span>M</span><span>+</span></div>
+        Trusted by campaigns, schools &amp; festivals to rally their people.
+      </div>
     </div>
-    <input type="text" id="authName" placeholder="Your name" hidden>
-    <input type="email" id="authEmail" placeholder="you@email.com" autocomplete="email">
-    <input type="password" id="authPass" placeholder="Password (min 6 characters)" autocomplete="current-password">
-    <div class="auth-error" id="authError"></div>
-    <button class="btn primary big" id="authSubmit" onclick="submitAuth()" style="width:100%">Log in</button>
-    <div class="divider">or</div>
-    <div id="gbtn"></div>
-    <p class="hint" id="googleHint" style="text-align:center"></p>
+
+    <div class="auth-stage">
+      <div class="hero-visual reveal" aria-hidden="true">
+        <div class="hv-ring">
+          <div class="hv-photo">
+            <svg viewBox="0 0 100 100" width="100%" height="100%"><defs><linearGradient id="hvg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d5efc"/><stop offset="1" stop-color="#ff5d8f"/></linearGradient></defs><rect width="100" height="100" fill="#23234a"/><circle cx="50" cy="40" r="17" fill="url(#hvg)"/><path d="M22 84c0-17 12-26 28-26s28 9 28 26z" fill="url(#hvg)"/></svg>
+          </div>
+        </div>
+        <div class="hv-chip c1">🗳️ VOTE 2026</div>
+        <div class="hv-chip c2">🎓 CLASS OF '26</div>
+        <div class="hv-spark s1"></div><div class="hv-spark s2"></div><div class="hv-spark s3"></div>
+      </div>
+
+      <div class="auth-card reveal">
+        <h2 id="authTitle">Welcome back</h2>
+        <div class="tabs">
+          <button class="tab selected" id="tabLogin" onclick="setAuthMode('login')">Log in</button>
+          <button class="tab" id="tabSignup" onclick="setAuthMode('signup')">Sign up</button>
+        </div>
+        <input type="text" id="authName" placeholder="Your name" hidden>
+        <input type="email" id="authEmail" placeholder="you@email.com" autocomplete="email">
+        <input type="password" id="authPass" placeholder="Password (min 6 characters)" autocomplete="current-password">
+        <div class="auth-error" id="authError"></div>
+        <button class="btn primary big magnetic" id="authSubmit" onclick="submitAuth()" style="width:100%">Log in</button>
+        <div class="divider">or</div>
+        <div id="gbtn"></div>
+        <p class="hint" id="googleHint" style="text-align:center"></p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -466,5 +491,39 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="/app.js"></script>
+<script>
+/* ---- landing micro-interactions (cosmetic only, fully guarded) ---- */
+(function () {
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) return;
+
+  // magnetic buttons: lean a fraction toward the cursor, spring back on leave
+  document.querySelectorAll(".magnetic").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) {
+      var r = el.getBoundingClientRect();
+      var mx = e.clientX - r.left - r.width / 2;
+      var my = e.clientY - r.top - r.height / 2;
+      el.style.transform = "translate(" + mx * 0.18 + "px," + my * 0.28 + "px)";
+    });
+    el.addEventListener("pointerleave", function () { el.style.transform = ""; });
+  });
+
+  // cursor-aware glow + parallax tilt on the hero visual
+  var overlay = document.getElementById("authOverlay");
+  var visual = document.querySelector(".hero-visual");
+  if (overlay) {
+    overlay.addEventListener("pointermove", function (e) {
+      overlay.style.setProperty("--mx", e.clientX + "px");
+      overlay.style.setProperty("--my", e.clientY + "px");
+      if (visual) {
+        var r = visual.getBoundingClientRect();
+        var dx = (e.clientX - (r.left + r.width / 2)) / r.width;
+        var dy = (e.clientY - (r.top + r.height / 2)) / r.height;
+        visual.style.transform = "rotateY(" + dx * 10 + "deg) rotateX(" + (-dy * 10) + "deg)";
+      }
+    });
+  }
+})();
+</script>
 </body>
 </html>
