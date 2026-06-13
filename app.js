@@ -367,6 +367,51 @@ function drawFrame(ctx, size, frame, onAsyncReady) {
   }
 }
 
+// Resolve a fill style (solid or gradient) in local centered space (origin = shape center).
+function ceFillStyle(ctx, el, w, h) {
+  if (el.fillType === "gradient") {
+    const a = (el.gradAngle || 0) * Math.PI / 180;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    const g = ctx.createLinearGradient(-dx * w / 2, -dy * h / 2, dx * w / 2, dy * h / 2);
+    g.addColorStop(0, el.fill || "#5b5bf0");
+    g.addColorStop(1, el.fill2 || el.fill || "#c026d3");
+    return g;
+  }
+  return el.fill || "#5b5bf0";
+}
+
+// Trace a centered shape path (origin at center) sized w×h into the current path.
+function ceShapePath(ctx, kind, w, h, cornerR) {
+  const hw = w / 2, hh = h / 2;
+  ctx.beginPath();
+  if (kind === "rect") {
+    roundRect(ctx, -hw, -hh, w, h, Math.min(cornerR || 0, hw, hh));
+  } else if (kind === "ellipse") {
+    ctx.ellipse(0, 0, hw, hh, 0, 0, Math.PI * 2);
+  } else if (kind === "triangle") {
+    ctx.moveTo(0, -hh); ctx.lineTo(hw, hh); ctx.lineTo(-hw, hh); ctx.closePath();
+  } else if (kind === "star") {
+    const pts = 5, inner = 0.45;
+    for (let i = 0; i < pts * 2; i++) {
+      const ang = -Math.PI / 2 + (i * Math.PI) / pts;
+      const r = i % 2 === 0 ? 1 : inner;
+      const x = Math.cos(ang) * hw * r, y = Math.sin(ang) * hh * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  } else if (kind === "heart") {
+    ctx.moveTo(0, hh * 0.75);
+    ctx.bezierCurveTo(hw * 1.4, -hh * 0.2, hw * 0.55, -hh * 1.15, 0, -hh * 0.45);
+    ctx.bezierCurveTo(-hw * 0.55, -hh * 1.15, -hw * 1.4, -hh * 0.2, 0, hh * 0.75);
+    ctx.closePath();
+  } else if (kind === "shield") {
+    ctx.moveTo(-hw, -hh); ctx.lineTo(hw, -hh); ctx.lineTo(hw, hh * 0.25);
+    ctx.quadraticCurveTo(hw, hh, 0, hh);
+    ctx.quadraticCurveTo(-hw, hh, -hw, hh * 0.25);
+    ctx.closePath();
+  }
+}
+
 // Renders a custom canvas frame. Works at any target size (editor preview or final export).
 function drawCustomElements(ctx, size, elems, onAsync) {
   const k = size / BASE;
@@ -377,6 +422,19 @@ function drawCustomElements(ctx, size, elems, onAsync) {
     ctx.save();
     ctx.globalAlpha = el.opacity ?? 1;
     switch (el.kind) {
+      case "backdrop": {
+        // full-frame mat with a transparent circular cutout for the photo
+        ctx.save();
+        ctx.translate(C, C);
+        ctx.fillStyle = ceFillStyle(ctx, el, BASE, BASE);
+        ctx.fillRect(-C, -C, BASE, BASE);
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.beginPath();
+        ctx.arc(0, 0, el.holeR ?? 430, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
       case "ring": {
         let stroke;
         if (el.style === "gradient") {
@@ -396,39 +454,61 @@ function drawCustomElements(ctx, size, elems, onAsync) {
       case "arctext":
         drawArcText(ctx, el.text || "", C, C, el.radius, el.size, el.color, el.font || '"Segoe UI",sans-serif', el.align === "top");
         break;
-      case "freetext": {
-        ctx.font = `${el.bold ? "bold " : ""}${el.italic ? "italic " : ""}${el.size}px ${el.font || '"Segoe UI",sans-serif'}`;
-        ctx.fillStyle = el.color;
-        ctx.textAlign = el.align || "center";
-        ctx.textBaseline = "middle";
+      case "freetext":
+      case "sticker": {
         ctx.save();
         ctx.translate(el.x, el.y);
         if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+        ctx.font = `${el.bold ? "bold " : ""}${el.italic ? "italic " : ""}${el.size}px ${el.font || '"Segoe UI",sans-serif'}`;
+        ctx.textAlign = el.align || "center";
+        ctx.textBaseline = "middle";
+        if (el.strokeW > 0 && el.stroke && el.stroke !== "none") {
+          ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW;
+          ctx.lineJoin = "round"; ctx.strokeText(el.text || "", 0, 0);
+        }
+        ctx.fillStyle = el.color || "#ffffff";
         ctx.fillText(el.text || "", 0, 0);
         ctx.restore();
         break;
       }
-      case "rect": {
+      case "line": {
+        ctx.beginPath();
+        ctx.moveTo(el.x1, el.y1); ctx.lineTo(el.x2, el.y2);
+        ctx.strokeStyle = el.color || "#ffffff";
+        ctx.lineWidth = el.width || 8;
+        ctx.lineCap = "round";
+        ctx.stroke();
+        break;
+      }
+      case "rect":
+      case "triangle":
+      case "star":
+      case "heart":
+      case "shield": {
         ctx.save();
         ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
         if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
-        ctx.fillStyle = el.fill;
-        roundRect(ctx, -el.w / 2, -el.h / 2, el.w, el.h, el.cornerR || 0);
+        ceShapePath(ctx, el.kind, el.w, el.h, el.cornerR);
+        ctx.fillStyle = ceFillStyle(ctx, el, el.w, el.h);
         ctx.fill();
         if (el.strokeW > 0 && el.stroke && el.stroke !== "none") {
-          ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW; ctx.stroke();
+          ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW;
+          ctx.lineJoin = "round"; ctx.stroke();
         }
         ctx.restore();
         break;
       }
       case "ellipse": {
-        ctx.beginPath();
-        ctx.ellipse(el.cx, el.cy, el.rx, el.ry, 0, 0, Math.PI * 2);
-        ctx.fillStyle = el.fill;
+        ctx.save();
+        ctx.translate(el.cx, el.cy);
+        if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+        ceShapePath(ctx, "ellipse", el.rx * 2, el.ry * 2, 0);
+        ctx.fillStyle = ceFillStyle(ctx, el, el.rx * 2, el.ry * 2);
         ctx.fill();
         if (el.strokeW > 0 && el.stroke && el.stroke !== "none") {
           ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW; ctx.stroke();
         }
+        ctx.restore();
         break;
       }
       case "image": {
@@ -438,6 +518,10 @@ function drawCustomElements(ctx, size, elems, onAsync) {
           ctx.save();
           ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
           if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+          if (el.round) {
+            ceShapePath(ctx, "ellipse", el.w, el.h, 0);
+            ctx.clip();
+          }
           ctx.drawImage(img, -el.w / 2, -el.h / 2, el.w, el.h);
           ctx.restore();
         }
@@ -1125,41 +1209,72 @@ async function publishCurrentFrame() {
 }
 
 // ============================================================
-// CANVAS FRAME EDITOR
+// CANVAS FRAME EDITOR — Canva-style freeform builder
 // ============================================================
-const CE_BASE = BASE;          // 1080 — design coordinate space
-const CE_SIZE = 500;           // editor canvas display size (px)
-const CE_SCALE = CE_SIZE / CE_BASE; // factor: design → canvas pixels
+const CE_BASE = BASE;                 // 1080 — design coordinate space
+const CE_SIZE = 520;                  // editor canvas display size (px)
+const CE_SCALE = CE_SIZE / CE_BASE;   // design → screen factor
+const D2S = CE_SCALE;
+const CE_MIN = 16;                    // min element size (design units)
+const CE_SNAP = 9;                    // center-snap threshold (design units)
+const CE_CENTER = CE_BASE / 2;        // 540
 
-let ceElems = [];              // array of layer elements
-let ceSelectedId = null;       // id of selected element
-let ceDragState = null;        // drag tracking {elem, startDx, startDy, snap}
+let ceElems = [];
+let ceSelectedId = null;
+let ceDrag = null;                    // active gesture
+let ceGuides = { v: false, h: false };
 let ceIdCtr = 0;
 function ceNewId() { return "ce" + (++ceIdCtr); }
 
-// Default values for each element kind
+const CE_UNDO = [], CE_REDO = [];
+let ceDownSnap = null;                // pre-gesture snapshot (for canvas drags)
+let cePropSnap = null, cePropEditing = false;
+
+const ceCanvas = document.getElementById("ceCanvas");
+const ceCtx = ceCanvas.getContext("2d");
+
+const CE_PALETTE = ["#ffffff","#000000","#5b5bf0","#c026d3","#e11d48","#f59e0b","#10b981","#0ea5e9","#7c3aed","#f43f5e","#fbbf24","#1e293b"];
+
+// ---------- element factories ----------
+function ceShapeBase(extra) {
+  return Object.assign({ x:430, y:120, w:220, h:220, fill:"#5b5bf0", fillType:"solid", fill2:"#c026d3", gradAngle:45, stroke:"none", strokeW:0, rotation:0, opacity:1 }, extra);
+}
 const CE_DEF = {
-  ring:     () => ({ kind:"ring",     radius:490, width:70,  style:"gradient", color1:"#5b5bf0", color2:"#c026d3", opacity:1 }),
-  arctext:  (o) => ({ kind:"arctext", text:"YOUR TEXT HERE", radius:468, size:56, color:"#ffffff", bold:true, font:'"Segoe UI",sans-serif', align:"top",    ...o }),
-  freetext: ()  => ({ kind:"freetext",text:"Your Text", x:540, y:860, size:80, color:"#ffffff", bold:true, italic:false, font:'"Segoe UI",sans-serif', align:"center", rotation:0, opacity:1 }),
-  rect:     ()  => ({ kind:"rect",    x:390, y:850, w:300, h:92, fill:"#5b5bf0", stroke:"none", strokeW:0, cornerR:14, rotation:0, opacity:1 }),
-  ellipse:  ()  => ({ kind:"ellipse", cx:540, cy:200, rx:68, ry:68, fill:"#c026d3", stroke:"none", strokeW:0, opacity:1 }),
-  image:    (o) => ({ kind:"image",   x:490, y:140, w:100, h:100, rotation:0, opacity:1, key:ceNewId(), ...o }),
+  ring:     ()  => ({ kind:"ring", radius:512, width:74, style:"gradient", color1:"#5b5bf0", color2:"#c026d3", opacity:1 }),
+  backdrop: ()  => ({ kind:"backdrop", holeR:430, fill:"#0f172a", fillType:"solid", fill2:"#1e293b", gradAngle:90, opacity:0.92 }),
+  arctext:  (o) => ({ kind:"arctext", text:"YOUR TEXT HERE", radius:476, size:58, color:"#ffffff", bold:true, font:'"Segoe UI",sans-serif', align:"top", opacity:1, ...o }),
+  freetext: (o) => ({ kind:"freetext", text:"Your text", x:540, y:880, size:78, color:"#ffffff", bold:true, italic:false, font:'"Segoe UI",sans-serif', align:"center", stroke:"none", strokeW:0, rotation:0, opacity:1, ...o }),
+  sticker:  (o) => ({ kind:"sticker", text:"⭐", x:540, y:170, size:150, color:"#ffffff", bold:false, italic:false, font:'"Segoe UI Emoji",sans-serif', align:"center", rotation:0, opacity:1, ...o }),
+  line:     ()  => ({ kind:"line", x1:330, y1:760, x2:750, y2:760, color:"#ffffff", width:10, opacity:1 }),
+  rect:     ()  => ceShapeBase({ kind:"rect", x:370, y:840, w:340, h:96, cornerR:18 }),
+  rrect:    ()  => ceShapeBase({ kind:"rect", x:370, y:840, w:340, h:96, cornerR:48 }),
+  ellipse:  ()  => ({ kind:"ellipse", cx:540, cy:200, rx:90, ry:90, fill:"#c026d3", fillType:"solid", fill2:"#5b5bf0", gradAngle:45, stroke:"none", strokeW:0, rotation:0, opacity:1 }),
+  triangle: ()  => ceShapeBase({ kind:"triangle", fill:"#f59e0b" }),
+  star:     ()  => ceShapeBase({ kind:"star", w:200, h:200, fill:"#fbbf24" }),
+  heart:    ()  => ceShapeBase({ kind:"heart", w:200, h:200, fill:"#e11d48" }),
+  shield:   ()  => ceShapeBase({ kind:"shield", w:200, h:240, fill:"#0ea5e9" }),
+  image:    (o) => ({ kind:"image", x:460, y:130, w:160, h:160, rotation:0, opacity:1, round:false, key:ceNewId(), ...o }),
 };
 
 function ceAdd(kind, overrides = {}) {
   const def = CE_DEF[kind];
   if (!def) return;
+  ceCommit();
   const elem = { id: ceNewId(), ...def(overrides) };
   ceElems.push(elem);
   ceSelectedId = elem.id;
-  ceDraw();
-  ceRenderLayers();
-  ceRenderProps();
+  ceAfterChange();
 }
+function ceAddText(preset) {
+  const sizes = { heading:{size:118,bold:true}, subheading:{size:74,bold:true}, body:{size:46,bold:false} };
+  const p = sizes[preset] || sizes.body;
+  const ys = { heading:300, subheading:800, body:880 };
+  ceAdd("freetext", { text: preset === "heading" ? "HEADING" : preset === "subheading" ? "Subheading" : "Body text", size:p.size, bold:p.bold, y: ys[preset] || 880 });
+}
+function ceAddSticker(emoji) { ceAdd("sticker", { text: emoji }); }
 
+// ---------- image upload ----------
 function ceAddImage() { document.getElementById("ceImageInput").click(); }
-
 document.getElementById("ceImageInput").addEventListener("change", e => {
   const f = e.target.files[0];
   if (!f) return;
@@ -1168,16 +1283,18 @@ document.getElementById("ceImageInput").addEventListener("change", e => {
     const src = reader.result;
     const existing = ceElems.find(el => el.id === ceSelectedId && el.kind === "image");
     if (existing) {
+      ceCommit();
       delete imgCache["ce_" + existing.key];
       existing.key = ceNewId();
       existing.src = src;
-      ceDraw();
+      ceAfterChange();
     } else {
       const tmp = new Image();
       tmp.onload = () => {
         const ratio = tmp.naturalWidth / tmp.naturalHeight;
-        const w = Math.min(240, tmp.naturalWidth);
-        ceAdd("image", { src, w, h: Math.round(w / ratio), x: CE_BASE / 2 - w / 2, y: 150 });
+        const w = Math.min(280, tmp.naturalWidth);
+        const round = document.getElementById("ceRoundUpload")?.checked || false;
+        ceAdd("image", { src, w, h: Math.round(w / ratio), x: CE_CENTER - w / 2, y: 150, round });
       };
       tmp.src = src;
     }
@@ -1186,273 +1303,535 @@ document.getElementById("ceImageInput").addEventListener("change", e => {
   e.target.value = "";
 });
 
-// ---- drawing ----
-const ceCanvas = document.getElementById("ceCanvas");
-const ceCtx = ceCanvas.getContext("2d");
+// ---------- geometry abstraction (box-like elements) ----------
+function ceMeasure(el) {
+  ceCtx.save();
+  ceCtx.font = `${el.bold ? "bold " : ""}${el.italic ? "italic " : ""}${el.size}px ${el.font || "sans-serif"}`;
+  const w = Math.max(24, ceCtx.measureText(el.text || " ").width);
+  ceCtx.restore();
+  return { w, h: el.size * 1.25 };
+}
+function ceGeom(el) {
+  switch (el.kind) {
+    case "ellipse": return { cx: el.cx, cy: el.cy, w: el.rx * 2, h: el.ry * 2, rot: el.rotation || 0 };
+    case "freetext": case "sticker": { const m = ceMeasure(el); return { cx: el.x, cy: el.y, w: m.w, h: m.h, rot: el.rotation || 0 }; }
+    case "rect": case "image": case "triangle": case "star": case "heart": case "shield":
+      return { cx: el.x + el.w / 2, cy: el.y + el.h / 2, w: el.w, h: el.h, rot: el.rotation || 0 };
+    default: return null; // ring / arctext / backdrop / line
+  }
+}
+function ceSetGeom(el, g) {
+  switch (el.kind) {
+    case "ellipse": el.cx = g.cx; el.cy = g.cy; if (g.w) el.rx = Math.max(8, g.w / 2); if (g.h) el.ry = Math.max(8, g.h / 2); el.rotation = g.rot; break;
+    case "freetext": case "sticker": el.x = g.cx; el.y = g.cy; if (g.h) el.size = Math.max(10, Math.round(g.h / 1.25)); el.rotation = g.rot; break;
+    default: el.x = g.cx - g.w / 2; el.y = g.cy - g.h / 2; el.w = Math.max(CE_MIN, g.w); el.h = Math.max(CE_MIN, g.h); el.rotation = g.rot;
+  }
+}
 
+// ---------- handle positions (screen space) ----------
+function ceHandles(el) {
+  const g = ceGeom(el);
+  if (g) {
+    const cs = { x: g.cx * D2S, y: g.cy * D2S };
+    const hw = g.w / 2 * D2S, hh = g.h / 2 * D2S;
+    const rot = (g.rot || 0) * Math.PI / 180, co = Math.cos(rot), si = Math.sin(rot);
+    const tf = (ox, oy) => ({ x: cs.x + ox * co - oy * si, y: cs.y + ox * si + oy * co });
+    const isText = el.kind === "freetext" || el.kind === "sticker";
+    const list = [];
+    [["nw",-hw,-hh],["ne",hw,-hh],["se",hw,hh],["sw",-hw,hh]].forEach(([t,ox,oy]) => list.push({ type:t, ...tf(ox,oy) }));
+    if (!isText) [["n",0,-hh],["e",hw,0],["s",0,hh],["w",-hw,0]].forEach(([t,ox,oy]) => list.push({ type:t, ...tf(ox,oy) }));
+    list.push({ type:"rot", ...tf(0, -hh - 28) });
+    return list;
+  }
+  if (el.kind === "ring" || el.kind === "arctext" || el.kind === "backdrop") {
+    const C = CE_SIZE / 2;
+    const R = (el.kind === "backdrop" ? el.holeR : el.radius) * D2S;
+    const a = -Math.PI / 4;
+    return [{ type:"radius", x: C + Math.cos(a) * R, y: C + Math.sin(a) * R }];
+  }
+  if (el.kind === "line") return [{ type:"p1", x: el.x1 * D2S, y: el.y1 * D2S }, { type:"p2", x: el.x2 * D2S, y: el.y2 * D2S }];
+  return [];
+}
+
+// ---------- drawing ----------
 function ceDraw() {
-  const ctx = ceCtx;
-  const S = CE_SIZE;
+  const ctx = ceCtx, S = CE_SIZE;
   ctx.clearRect(0, 0, S, S);
-
-  // dark background
   ctx.fillStyle = "#13132a";
   ctx.fillRect(0, 0, S, S);
 
-  // photo placeholder circle
-  const photoR = (CE_BASE * 0.43) * CE_SCALE;
+  // photo placeholder
+  const photoR = (CE_BASE * 0.40) * D2S;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(S / 2, S / 2, photoR, 0, Math.PI * 2);
-  ctx.fillStyle = "#1e1e40";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.arc(S/2, S/2, photoR, 0, Math.PI*2);
+  ctx.fillStyle = "#22224a"; ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1; ctx.stroke();
   ctx.restore();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.font = `${Math.round(photoR*0.6)}px serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("👤", S/2, S/2);
 
-  // face silhouette hint
-  ctx.fillStyle = "rgba(255,255,255,0.07)";
-  ctx.font = `${Math.round(photoR * 0.65)}px serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("👤", S / 2, S / 2);
-
-  // frame elements
   drawCustomElements(ceCtx, S, ceElems, ceDraw);
 
-  // selection indicators (drawn in canvas-pixel space, no scale)
+  // snap guides
+  if (ceGuides.v) { ctx.save(); ctx.strokeStyle = "#ff3da6"; ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(S/2,0); ctx.lineTo(S/2,S); ctx.stroke(); ctx.restore(); }
+  if (ceGuides.h) { ctx.save(); ctx.strokeStyle = "#ff3da6"; ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(0,S/2); ctx.lineTo(S,S/2); ctx.stroke(); ctx.restore(); }
+
   if (ceSelectedId) {
-    const elem = ceElems.find(e => e.id === ceSelectedId);
-    if (elem) ceDrawSelection(elem);
+    const el = ceElems.find(e => e.id === ceSelectedId);
+    if (el) ceDrawSelection(el);
   }
 }
 
 function ceDrawSelection(el) {
   const ctx = ceCtx;
-  const s = CE_SCALE;
-  const C = CE_SIZE / 2; // 250
-
+  const handles = ceHandles(el);
   ctx.save();
-  ctx.strokeStyle = "#5b5bf0";
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = "#5b5bf0"; ctx.lineWidth = 1.5;
 
-  if (el.kind === "ring") {
+  const g = ceGeom(el);
+  if (g) {
+    // rotated bbox outline through corners
+    const corners = handles.filter(h => ["nw","ne","se","sw"].includes(h.type));
+    if (corners.length === 4) {
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+      ctx.setLineDash([5,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // rotation arm
+    const rotH = handles.find(h => h.type === "rot");
+    const topMid = { x: (corners[0].x + corners[1].x)/2, y: (corners[0].y + corners[1].y)/2 };
+    if (rotH) { ctx.beginPath(); ctx.moveTo(topMid.x, topMid.y); ctx.lineTo(rotH.x, rotH.y); ctx.stroke(); }
+  } else if (el.kind === "ring" || el.kind === "arctext" || el.kind === "backdrop") {
+    const C = CE_SIZE/2, R = (el.kind === "backdrop" ? el.holeR : el.radius) * D2S;
+    ctx.setLineDash([5,4]); ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+  } else if (el.kind === "line") {
+    ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(el.x1*D2S, el.y1*D2S); ctx.lineTo(el.x2*D2S, el.y2*D2S); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // handles
+  for (const h of handles) {
     ctx.beginPath();
-    ctx.arc(C, C, (el.radius - el.width) * s, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(C, C, el.radius * s, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (el.kind === "arctext") {
-    ctx.beginPath();
-    ctx.arc(C, C, (el.radius - el.size * 0.6) * s, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(C, C, (el.radius + el.size * 0.6) * s, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (el.kind === "freetext") {
-    const approxW = (el.text.length || 1) * el.size * 0.55 * s;
-    const approxH = el.size * 1.3 * s;
-    ctx.strokeRect(el.x * s - approxW / 2, el.y * s - approxH / 2, approxW, approxH);
-  } else if (el.kind === "rect") {
-    ctx.strokeRect(el.x * s, el.y * s, el.w * s, el.h * s);
-    // corner handles
-    [[0,0],[1,0],[0,1],[1,1]].forEach(([hx,hy]) => {
-      ctx.fillStyle = "#fff";
-      ctx.setLineDash([]);
-      ctx.fillRect(el.x * s + hx * el.w * s - 4, el.y * s + hy * el.h * s - 4, 8, 8);
-    });
-  } else if (el.kind === "ellipse") {
-    ctx.setLineDash([5,4]);
-    ctx.beginPath();
-    ctx.ellipse(el.cx * s, el.cy * s, el.rx * s, el.ry * s, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (el.kind === "image") {
-    ctx.strokeRect(el.x * s, el.y * s, el.w * s, el.h * s);
-    [[0,0],[1,0],[0,1],[1,1]].forEach(([hx,hy]) => {
-      ctx.fillStyle = "#fff";
-      ctx.setLineDash([]);
-      ctx.fillRect(el.x * s + hx * el.w * s - 4, el.y * s + hy * el.h * s - 4, 8, 8);
-    });
+    if (h.type === "rot") { ctx.fillStyle = "#5b5bf0"; ctx.arc(h.x, h.y, 6, 0, Math.PI*2); ctx.fill(); }
+    else { ctx.fillStyle = "#fff"; ctx.strokeStyle = "#5b5bf0"; ctx.lineWidth = 1.5;
+           ctx.rect(h.x-5, h.y-5, 10, 10); ctx.fill(); ctx.stroke(); }
   }
   ctx.restore();
 }
 
-// ---- hit testing ----
+// ---------- pointer / hit testing ----------
 function cePt(e) {
   const r = ceCanvas.getBoundingClientRect();
   const cx = (e.clientX - r.left) * (CE_SIZE / r.width);
   const cy = (e.clientY - r.top)  * (CE_SIZE / r.height);
-  return { cx, cy, dx: cx / CE_SCALE, dy: cy / CE_SCALE };
+  return { cx, cy, dx: cx / D2S, dy: cy / D2S };
 }
-
-function ceHit(dx, dy) {
-  const C = CE_BASE / 2;
-  for (let i = ceElems.length - 1; i >= 0; i--) {
-    const el = ceElems[i];
-    const dist = Math.hypot(dx - C, dy - C);
-    if (el.kind === "ring") {
-      if (dist >= el.radius - el.width && dist <= el.radius) return el;
-    } else if (el.kind === "arctext") {
-      if (Math.abs(dist - el.radius) < el.size) return el;
-    } else if (el.kind === "freetext") {
-      const hw = (el.text.length || 1) * el.size * 0.55;
-      if (Math.abs(dx - el.x) < hw && Math.abs(dy - el.y) < el.size * 0.7) return el;
-    } else if (el.kind === "rect") {
-      if (dx >= el.x && dx <= el.x + el.w && dy >= el.y && dy <= el.y + el.h) return el;
-    } else if (el.kind === "ellipse") {
-      if (((dx - el.cx) / el.rx) ** 2 + ((dy - el.cy) / el.ry) ** 2 <= 1) return el;
-    } else if (el.kind === "image") {
-      if (dx >= el.x && dx <= el.x + el.w && dy >= el.y && dy <= el.y + el.h) return el;
-    }
-  }
+function ceHandleAt(cx, cy) {
+  if (!ceSelectedId) return null;
+  const el = ceElems.find(e => e.id === ceSelectedId);
+  if (!el) return null;
+  for (const h of ceHandles(el)) if (Math.hypot(cx - h.x, cy - h.y) < 12) return h.type;
+  return null;
+}
+function cePtSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2-x1, dy = y2-y1, l2 = dx*dx+dy*dy;
+  let t = l2 ? ((px-x1)*dx + (py-y1)*dy)/l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1+t*dx), py - (y1+t*dy));
+}
+function ceBodyHas(el, dx, dy) {
+  if (el.kind === "ring") { const d = Math.hypot(dx-CE_CENTER, dy-CE_CENTER); return d >= el.radius-el.width-10 && d <= el.radius+10; }
+  if (el.kind === "arctext") { const d = Math.hypot(dx-CE_CENTER, dy-CE_CENTER); return Math.abs(d-el.radius) < el.size; }
+  if (el.kind === "backdrop") return false; // select via layers panel only
+  if (el.kind === "line") return cePtSeg(dx, dy, el.x1, el.y1, el.x2, el.y2) < (el.width/2 + 12);
+  const g = ceGeom(el); if (!g) return false;
+  const rot = -(g.rot||0) * Math.PI/180;
+  const px = dx-g.cx, py = dy-g.cy;
+  const lx = px*Math.cos(rot) - py*Math.sin(rot);
+  const ly = px*Math.sin(rot) + py*Math.cos(rot);
+  if (el.kind === "ellipse") return (lx/(g.w/2))**2 + (ly/(g.h/2))**2 <= 1;
+  return Math.abs(lx) <= g.w/2 && Math.abs(ly) <= g.h/2;
+}
+function ceHitBody(dx, dy) {
+  for (let i = ceElems.length-1; i >= 0; i--) if (ceBodyHas(ceElems[i], dx, dy)) return ceElems[i];
   return null;
 }
 
-// ---- mouse / touch events ----
 ceCanvas.addEventListener("pointerdown", e => {
   const { cx, cy, dx, dy } = cePt(e);
-  const hit = ceHit(dx, dy);
-  ceSelectedId = hit ? hit.id : null;
-  if (hit) {
+  const ht = ceHandleAt(cx, cy);
+  if (ht) {
+    const el = ceElems.find(e => e.id === ceSelectedId);
+    ceDownSnap = JSON.stringify(ceElems);
+    const mode = ht === "rot" ? "rotate" : ht === "radius" ? "radius" : (ht === "p1" || ht === "p2") ? ht : "resize";
+    ceDrag = { mode, el, handle: ht, startDx: dx, startDy: dy, orig: JSON.parse(JSON.stringify(el)) };
     ceCanvas.setPointerCapture(e.pointerId);
-    ceDragState = { elem: hit, startDx: dx, startDy: dy, orig: JSON.parse(JSON.stringify(hit)) };
+    return;
   }
-  ceDraw();
-  ceRenderLayers();
-  ceRenderProps();
+  const hit = ceHitBody(dx, dy);
+  if (hit) {
+    if (hit.id !== ceSelectedId) { ceSelectedId = hit.id; ceRenderLayers(); ceRenderProps(); }
+    ceDownSnap = JSON.stringify(ceElems);
+    const mode = (hit.kind === "ring" || hit.kind === "arctext" || hit.kind === "backdrop") ? "radius" : "move";
+    ceDrag = { mode, el: hit, handle: null, startDx: dx, startDy: dy, orig: JSON.parse(JSON.stringify(hit)) };
+    ceCanvas.setPointerCapture(e.pointerId);
+    ceDraw(); ceUpdateFloat();
+    return;
+  }
+  if (ceSelectedId) { ceSelectedId = null; ceRenderLayers(); ceRenderProps(); ceDraw(); ceUpdateFloat(); }
 });
 
 ceCanvas.addEventListener("pointermove", e => {
-  if (!ceDragState) return;
-  const { dx, dy } = cePt(e);
-  const ddx = dx - ceDragState.startDx;
-  const ddy = dy - ceDragState.startDy;
-  const el = ceDragState.elem;
-  const orig = ceDragState.orig;
-  switch (el.kind) {
-    case "freetext": el.x = orig.x + ddx; el.y = orig.y + ddy; break;
-    case "rect":     el.x = orig.x + ddx; el.y = orig.y + ddy; break;
-    case "ellipse":  el.cx = orig.cx + ddx; el.cy = orig.cy + ddy; break;
-    case "image":    el.x = orig.x + ddx; el.y = orig.y + ddy; break;
-    case "ring":     el.radius = Math.max(50, Math.min(540, orig.radius - ddy)); break;
-    case "arctext":  el.radius = Math.max(50, Math.min(540, orig.radius - ddy)); break;
+  if (!ceDrag) {
+    // hover cursor feedback
+    const { cx, cy } = cePt(e);
+    ceCanvas.style.cursor = ceHandleAt(cx, cy) ? "pointer" : "default";
+    return;
   }
-  ceDraw();
+  const { dx, dy } = cePt(e);
+  const el = ceDrag.el, o = ceDrag.orig;
+  ceGuides = { v: false, h: false };
+  if (ceDrag.mode === "move") {
+    const ddx = dx - ceDrag.startDx, ddy = dy - ceDrag.startDy;
+    if (el.kind === "line") { el.x1 = o.x1+ddx; el.y1 = o.y1+ddy; el.x2 = o.x2+ddx; el.y2 = o.y2+ddy; }
+    else {
+      const og = ceGeom(o);
+      let ncx = og.cx + ddx, ncy = og.cy + ddy;
+      if (Math.abs(ncx - CE_CENTER) < CE_SNAP) { ncx = CE_CENTER; ceGuides.v = true; }
+      if (Math.abs(ncy - CE_CENTER) < CE_SNAP) { ncy = CE_CENTER; ceGuides.h = true; }
+      ceSetGeom(el, { cx: ncx, cy: ncy, w: og.w, h: og.h, rot: og.rot });
+    }
+  } else if (ceDrag.mode === "resize") {
+    ceResize(el, ceDrag.handle, dx, dy);
+  } else if (ceDrag.mode === "rotate") {
+    const g = ceGeom(el);
+    let ang = Math.atan2(dy - g.cy, dx - g.cx) * 180/Math.PI + 90;
+    ang = ((ang + 180) % 360 + 360) % 360 - 180;
+    const near = Math.round(ang/15)*15;
+    if (Math.abs(ang - near) < 4) ang = near;
+    ceSetGeom(el, { cx: g.cx, cy: g.cy, w: g.w, h: g.h, rot: ang });
+  } else if (ceDrag.mode === "radius") {
+    let r = Math.max(40, Math.min(540, Math.hypot(dx-CE_CENTER, dy-CE_CENTER)));
+    if (el.kind === "backdrop") el.holeR = r; else el.radius = r;
+  } else if (ceDrag.mode === "p1") { el.x1 = dx; el.y1 = dy; }
+  else if (ceDrag.mode === "p2") { el.x2 = dx; el.y2 = dy; }
+  ceDraw(); ceUpdateFloat();
 });
 
-ceCanvas.addEventListener("pointerup", () => { ceDragState = null; });
+function ceResize(el, handle, Pdx, Pdy) {
+  const g = ceGeom(el);
+  const rot = (g.rot||0) * Math.PI/180;
+  const ux = { x: Math.cos(rot), y: Math.sin(rot) };
+  const uy = { x: -Math.sin(rot), y: Math.cos(rot) };
+  const sx = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
+  const sy = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
+  const hw = g.w/2, hh = g.h/2;
+  const anchor = { x: g.cx - sx*hw*ux.x - sy*hh*uy.x, y: g.cy - sx*hw*ux.y - sy*hh*uy.y };
+  const D = { x: Pdx - anchor.x, y: Pdy - anchor.y };
+  const du = D.x*ux.x + D.y*ux.y;
+  const dv = D.x*uy.x + D.y*uy.y;
+  let newW = sx !== 0 ? Math.max(CE_MIN, sx*du) : g.w;
+  let newH = sy !== 0 ? Math.max(CE_MIN, sy*dv) : g.h;
+  const ncx = anchor.x + sx*(newW/2)*ux.x + sy*(newH/2)*uy.x;
+  const ncy = anchor.y + sx*(newW/2)*ux.y + sy*(newH/2)*uy.y;
+  ceSetGeom(el, { cx: ncx, cy: ncy, w: newW, h: newH, rot: g.rot });
+}
 
+function ceEndGesture() {
+  if (!ceDrag) return;
+  ceDrag = null;
+  ceGuides = { v: false, h: false };
+  if (ceDownSnap && JSON.stringify(ceElems) !== ceDownSnap) ceHistPush(ceDownSnap);
+  ceDownSnap = null;
+  ceDraw(); ceRenderProps(); ceRenderLayers();
+}
+ceCanvas.addEventListener("pointerup", ceEndGesture);
+ceCanvas.addEventListener("pointercancel", ceEndGesture);
+
+// ---------- history ----------
+function ceHistPush(json) { CE_UNDO.push(json); if (CE_UNDO.length > 60) CE_UNDO.shift(); CE_REDO.length = 0; ceUpdateHist(); }
+function ceCommit() { ceHistPush(JSON.stringify(ceElems)); }   // call BEFORE a mutation
+function ceUndo() { if (!CE_UNDO.length) return; CE_REDO.push(JSON.stringify(ceElems)); ceElems = JSON.parse(CE_UNDO.pop()); ceFixSel(); ceAfterChange(); }
+function ceRedo() { if (!CE_REDO.length) return; CE_UNDO.push(JSON.stringify(ceElems)); ceElems = JSON.parse(CE_REDO.pop()); ceFixSel(); ceAfterChange(); }
+function ceFixSel() { if (ceSelectedId && !ceElems.find(e => e.id === ceSelectedId)) ceSelectedId = null; }
+function ceUpdateHist() {
+  const u = document.getElementById("ceUndo"), r = document.getElementById("ceRedo");
+  if (u) u.disabled = !CE_UNDO.length;
+  if (r) r.disabled = !CE_REDO.length;
+}
+function ceAfterChange() { ceDraw(); ceRenderLayers(); ceRenderProps(); ceUpdateFloat(); ceUpdateHist(); }
+
+// ---------- keyboard ----------
 document.addEventListener("keydown", e => {
   if (document.getElementById("view-canvas").hidden) return;
-  if (["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)) return;
-  if (e.key === "Delete" || e.key === "Backspace") ceDeleteSelected();
-  if (e.key === "ArrowUp"    && ceSelectedId) { ceMoveLayer(1); }
-  if (e.key === "ArrowDown"  && ceSelectedId) { ceMoveLayer(-1); }
+  const typing = ["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName);
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? ceRedo() : ceUndo(); return; }
+  if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); ceRedo(); return; }
+  if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); ceDuplicate(); return; }
+  if (typing) return;
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); ceDeleteSelected(); }
+  else if (e.key.startsWith("Arrow") && ceSelectedId) { e.preventDefault(); ceNudge(e.key, e.shiftKey ? 12 : 3); }
+  else if (e.key === "]") ceMoveLayer(1);
+  else if (e.key === "[") ceMoveLayer(-1);
 });
-
-// ---- layers panel ----
-const CE_LABELS = { ring:"⭕ Ring", arctext:"⬆ Arc Text", freetext:"✏️ Text", rect:"▬ Rect", ellipse:"● Circle", image:"🖼 Image" };
-
-function ceRenderLayers() {
-  const el = document.getElementById("ceLayers");
-  if (!el) return;
-  if (!ceElems.length) { el.innerHTML = '<p class="hint" style="margin:0">No elements yet</p>'; return; }
-  el.innerHTML = [...ceElems].reverse().map((elem, ri) => {
-    const idx = ceElems.length - 1 - ri;
-    return `<div class="ce-layer${elem.id === ceSelectedId ? " selected" : ""}" onclick="ceSelectLayer('${elem.id}')">
-      <span>${CE_LABELS[elem.kind] || elem.kind}</span>
-      <div class="ce-layer-btns">
-        ${idx < ceElems.length - 1 ? `<button onclick="ceMoveLayerIdx(${idx},1);event.stopPropagation()" title="Up">↑</button>` : ""}
-        ${idx > 0 ? `<button onclick="ceMoveLayerIdx(${idx},-1);event.stopPropagation()" title="Down">↓</button>` : ""}
-        <button onclick="ceRemoveLayer('${elem.id}');event.stopPropagation()" title="Delete">✕</button>
-      </div>
-    </div>`;
-  }).join("");
+function ceNudge(key, amt) {
+  const el = ceElems.find(e => e.id === ceSelectedId); if (!el) return;
+  ceCommit();
+  const d = { ArrowUp:[0,-amt], ArrowDown:[0,amt], ArrowLeft:[-amt,0], ArrowRight:[amt,0] }[key];
+  if (el.kind === "ring" || el.kind === "arctext" || el.kind === "backdrop") {
+    const k = el.kind === "backdrop" ? "holeR" : "radius";
+    el[k] = Math.max(40, Math.min(540, el[k] - d[1]));
+  } else if (el.kind === "line") { el.x1+=d[0]; el.x2+=d[0]; el.y1+=d[1]; el.y2+=d[1]; }
+  else { const g = ceGeom(el); ceSetGeom(el, { cx: g.cx+d[0], cy: g.cy+d[1], w: g.w, h: g.h, rot: g.rot }); }
+  ceAfterChange();
 }
 
-function ceSelectLayer(id) {
-  ceSelectedId = id; ceDraw(); ceRenderLayers(); ceRenderProps();
+// ---------- duplicate / delete / layers ----------
+function ceDuplicate() {
+  const el = ceElems.find(e => e.id === ceSelectedId); if (!el) return;
+  ceCommit();
+  const c = JSON.parse(JSON.stringify(el));
+  c.id = ceNewId();
+  if (c.kind === "image") { const nk = ceNewId(); if (imgCache["ce_"+el.key]) imgCache["ce_"+nk] = imgCache["ce_"+el.key]; c.key = nk; }
+  const g = ceGeom(c);
+  if (g) ceSetGeom(c, { cx: g.cx+34, cy: g.cy+34, w: g.w, h: g.h, rot: g.rot });
+  else if (c.kind === "line") { c.x1+=34; c.y1+=34; c.x2+=34; c.y2+=34; }
+  ceElems.push(c); ceSelectedId = c.id; ceAfterChange();
 }
+function ceDeleteSelected() { if (ceSelectedId) ceRemoveLayer(ceSelectedId); }
+function ceRemoveLayer(id) {
+  ceCommit();
+  ceElems = ceElems.filter(e => e.id !== id);
+  if (ceSelectedId === id) ceSelectedId = null;
+  ceAfterChange();
+}
+function ceSelectLayer(id) { ceSelectedId = id; ceAfterChange(); }
 function ceMoveLayerIdx(idx, dir) {
   const ni = idx + dir;
   if (ni < 0 || ni >= ceElems.length) return;
+  ceCommit();
   [ceElems[idx], ceElems[ni]] = [ceElems[ni], ceElems[idx]];
-  ceRenderLayers(); ceDraw();
+  ceAfterChange();
 }
 function ceMoveLayer(dir) {
   const idx = ceElems.findIndex(e => e.id === ceSelectedId);
   if (idx === -1) return;
   ceMoveLayerIdx(idx, dir);
 }
-function ceRemoveLayer(id) {
-  ceElems = ceElems.filter(e => e.id !== id);
-  if (ceSelectedId === id) ceSelectedId = null;
-  ceDraw(); ceRenderLayers(); ceRenderProps();
+
+const CE_LABELS = { ring:"⭕ Ring border", backdrop:"🌗 Backdrop", arctext:"➰ Arc text", freetext:"🆗 Text", sticker:"⭐ Sticker", line:"➖ Line", rect:"▭ Rectangle", ellipse:"⬤ Circle", triangle:"🔺 Triangle", star:"⭐ Star", heart:"❤️ Heart", shield:"🛡 Shield", image:"🖼 Image" };
+function ceLayerName(el) {
+  if (el.kind === "freetext" || el.kind === "arctext") return "“" + (el.text || "").slice(0,14) + "”";
+  if (el.kind === "sticker") return el.text + " Sticker";
+  return CE_LABELS[el.kind] || el.kind;
 }
-function ceDeleteSelected() { if (ceSelectedId) ceRemoveLayer(ceSelectedId); }
+function ceRenderLayers() {
+  const box = document.getElementById("ceLayers");
+  if (!box) return;
+  if (!ceElems.length) { box.innerHTML = '<p class="hint" style="margin:0">No elements yet</p>'; return; }
+  box.innerHTML = [...ceElems].reverse().map((el, ri) => {
+    const idx = ceElems.length - 1 - ri;
+    return `<div class="ce-layer${el.id === ceSelectedId ? " selected" : ""}" onclick="ceSelectLayer('${el.id}')">
+      <span class="ce-layer-name">${ceLayerName(el)}</span>
+      <div class="ce-layer-btns">
+        ${idx < ceElems.length-1 ? `<button onclick="ceMoveLayerIdx(${idx},1);event.stopPropagation()" title="Up">↑</button>` : ""}
+        ${idx > 0 ? `<button onclick="ceMoveLayerIdx(${idx},-1);event.stopPropagation()" title="Down">↓</button>` : ""}
+        <button onclick="ceRemoveLayer('${el.id}');event.stopPropagation()" title="Delete">✕</button>
+      </div>
+    </div>`;
+  }).join("");
+}
 
-// ---- properties panel ----
+// ---------- floating toolbar ----------
+function ceUpdateFloat() {
+  const f = document.getElementById("ceFloat");
+  if (!f) return;
+  const el = ceElems.find(e => e.id === ceSelectedId);
+  if (!el) { f.hidden = true; return; }
+  let cxS, topS;
+  const g = ceGeom(el);
+  if (g) { const hs = ceHandles(el); const xs = hs.map(h=>h.x), ys = hs.map(h=>h.y); cxS = (Math.min(...xs)+Math.max(...xs))/2; topS = Math.min(...ys); }
+  else if (el.kind === "ring" || el.kind === "arctext") { cxS = CE_SIZE/2; topS = CE_SIZE/2 - el.radius*D2S; }
+  else if (el.kind === "backdrop") { cxS = CE_SIZE/2; topS = CE_SIZE/2 - el.holeR*D2S; }
+  else if (el.kind === "line") { cxS = (el.x1+el.x2)/2*D2S; topS = Math.min(el.y1,el.y2)*D2S; }
+  f.hidden = false;
+  f.style.left = (cxS / CE_SIZE * 100) + "%";
+  f.style.top = (Math.max(2, topS - 12) / CE_SIZE * 100) + "%";
+}
+
+// ---------- properties panel ----------
+const CE_FONTS = [{v:'"Segoe UI",sans-serif',l:"Segoe UI"},{v:"Arial,sans-serif",l:"Arial"},{v:"Georgia,serif",l:"Georgia"},{v:"Impact,sans-serif",l:"Impact"},{v:'"Courier New",monospace',l:"Courier"},{v:'"Times New Roman",serif',l:"Times"}];
 function ceRenderProps() {
-  const el = document.getElementById("ceProps");
-  if (!el) return;
-  const elem = ceElems.find(e => e.id === ceSelectedId);
-  if (!elem) { el.innerHTML = '<p class="hint" style="margin:0">Select an element to edit it</p>'; return; }
+  const box = document.getElementById("ceProps");
+  if (!box) return;
+  const el = ceElems.find(e => e.id === ceSelectedId);
+  if (!el) { box.innerHTML = '<p class="hint" style="margin:0">Select an element on the canvas to edit it.</p>'; return; }
 
-  // helpers that emit form controls; oninput calls cePropSet
-  const lbl   = (txt) => `<span style="font-size:0.78rem;color:var(--muted)">${txt}</span>`;
-  const color  = (k, l)      => `<label class="field" style="flex-direction:row;align-items:center;justify-content:space-between;gap:8px">${lbl(l)}<input type="color" value="${elem[k]||"#ffffff"}" oninput="cePropSet('${k}',this.value)"></label>`;
-  const range  = (k, l, mn, mx, step=1) => `<label class="field">${lbl(l)}<div class="ce-range-row"><input type="range" min="${mn}" max="${mx}" step="${step}" value="${elem[k]??0}" oninput="cePropSet('${k}',+this.value);this.nextSibling.textContent=this.value"><span class="ce-range-val">${elem[k]??0}</span></div></label>`;
-  const text   = (k, l)      => `<label class="field">${lbl(l)}<input type="text" value="${(elem[k]||"").replace(/"/g,"&quot;")}" oninput="cePropSet('${k}',this.value)"></label>`;
-  const sel    = (k, l, opts)=> `<label class="field">${lbl(l)}<select onchange="cePropSet('${k}',this.value)">${opts.map(o=>`<option value="${o.v}"${elem[k]===o.v?" selected":""}>${o.l}</option>`).join("")}</select></label>`;
-  const chk    = (k, l)      => `<label class="ce-check-row"><input type="checkbox" ${elem[k]?"checked":""} onchange="cePropSet('${k}',this.checked)"> ${l}</label>`;
+  const lbl = t => `<span style="font-size:0.78rem;color:var(--muted)">${t}</span>`;
+  const color = (k,l) => `<label class="field" style="flex-direction:row;align-items:center;justify-content:space-between;gap:8px">${lbl(l)}<input type="color" value="${el[k]||"#ffffff"}" oninput="cePropSet('${k}',this.value)"></label>`;
+  const swatches = (k) => `<div class="ce-swatches">${CE_PALETTE.map(c=>`<div class="ce-swatch" style="background:${c}" onclick="cePropSet('${k}','${c}')"></div>`).join("")}</div>`;
+  const range = (k,l,mn,mx,st=1) => `<label class="field">${lbl(l)}<div class="ce-range-row"><input type="range" min="${mn}" max="${mx}" step="${st}" value="${el[k]??0}" oninput="cePropSet('${k}',+this.value);this.nextElementSibling.textContent=this.value"><span class="ce-range-val">${el[k]??0}</span></div></label>`;
+  const text = (k,l) => `<label class="field">${lbl(l)}<input type="text" value="${(el[k]||"").replace(/"/g,"&quot;")}" oninput="cePropSet('${k}',this.value)"></label>`;
+  const sel = (k,l,opts) => `<label class="field">${lbl(l)}<select onchange="cePropSet('${k}',this.value)">${opts.map(o=>`<option value="${o.v}"${el[k]===o.v?" selected":""}>${o.l}</option>`).join("")}</select></label>`;
+  const chk = (k,l) => `<label class="ce-check-row"><input type="checkbox" ${el[k]?"checked":""} onchange="cePropSet('${k}',this.checked)"> ${l}</label>`;
 
-  const FONTS = [{v:'"Segoe UI",sans-serif',l:"Segoe UI"},{v:"Arial,sans-serif",l:"Arial"},{v:"Georgia,serif",l:"Georgia"},{v:'"Courier New",monospace',l:"Courier"},{v:'"Times New Roman",serif',l:"Times New Roman"}];
+  // shared fill controls (solid/gradient) for shapes & backdrop
+  const fillCtrls = () => sel("fillType","Fill type",[{v:"solid",l:"Solid"},{v:"gradient",l:"Gradient"}]) +
+    color("fill", el.fillType==="gradient" ? "Color 1" : "Fill") + swatches("fill") +
+    (el.fillType==="gradient" ? color("fill2","Color 2") + range("gradAngle","Gradient angle",0,360) : "");
+  const shapeExtras = () => color("stroke","Border color") + range("strokeW","Border width",0,50) + range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01);
 
-  let h = `<div class="ce-prop-head"><b>${{ring:"Ring Border",arctext:"Arc Text",freetext:"Free Text",rect:"Rectangle",ellipse:"Circle/Oval",image:"Image"}[elem.kind]||elem.kind}</b><button class="btn danger small" onclick="ceDeleteSelected()" style="padding:3px 10px;font-size:0.75rem">🗑</button></div>`;
+  const titleMap = { ring:"Ring border", backdrop:"Mat backdrop", arctext:"Arc text", freetext:"Text", sticker:"Sticker", line:"Line", rect:"Rectangle", ellipse:"Circle / oval", triangle:"Triangle", star:"Star", heart:"Heart", shield:"Shield", image:"Image" };
+  let h = `<div class="ce-prop-head"><b>${titleMap[el.kind]||el.kind}</b><button class="ce-tb-btn ghost-tb" style="width:28px;height:28px;background:rgba(225,29,72,0.12);color:#e11d48" onclick="ceDeleteSelected()" title="Delete">🗑</button></div>`;
 
-  if (elem.kind === "ring") {
-    h += range("radius","Radius",60,535) + range("width","Thickness",4,220) +
-         sel("style","Style",[{v:"gradient",l:"Gradient"},{v:"solid",l:"Solid"},{v:"dashed",l:"Dashed"}]) +
-         color("color1","Color 1") + (elem.style!=="solid" ? color("color2","Color 2") : "") +
-         range("opacity","Opacity",0,1,0.01);
-  } else if (elem.kind === "arctext") {
+  if (el.kind === "ring") {
+    h += range("radius","Radius",80,535) + range("width","Thickness",4,260) +
+      sel("style","Style",[{v:"gradient",l:"Gradient"},{v:"solid",l:"Solid"},{v:"dashed",l:"Dashed"}]) +
+      color("color1","Color 1") + swatches("color1") + (el.style!=="solid" ? color("color2","Color 2") : "") +
+      range("opacity","Opacity",0,1,0.01);
+  } else if (el.kind === "backdrop") {
+    h += range("holeR","Photo hole",120,535) + fillCtrls() + range("opacity","Opacity",0,1,0.01) +
+      `<p class="hint" style="margin:2px 0 0">Fills the frame and leaves a circular cut-out for the photo.</p>`;
+  } else if (el.kind === "arctext") {
     h += text("text","Text") + sel("align","Position",[{v:"top",l:"Top arc"},{v:"bottom",l:"Bottom arc"}]) +
-         range("radius","Radius",60,535) + range("size","Font size",10,160) +
-         color("color","Color") + chk("bold","Bold") + sel("font","Font",FONTS);
-  } else if (elem.kind === "freetext") {
-    h += text("text","Text") + range("size","Font size",10,220) + color("color","Color") +
-         chk("bold","Bold") + chk("italic","Italic") + sel("font","Font",FONTS) +
-         sel("align","Align",[{v:"center",l:"Center"},{v:"left",l:"Left"},{v:"right",l:"Right"}]) +
-         range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01);
-  } else if (elem.kind === "rect") {
-    h += range("w","Width",10,900) + range("h","Height",10,900) +
-         color("fill","Fill") + color("stroke","Border color") +
-         range("strokeW","Border width",0,40) + range("cornerR","Corner radius",0,200) +
-         range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01);
-  } else if (elem.kind === "ellipse") {
-    h += range("rx","Radius X",5,540) + range("ry","Radius Y",5,540) +
-         color("fill","Fill") + color("stroke","Border color") +
-         range("strokeW","Border width",0,40) + range("opacity","Opacity",0,1,0.01);
-  } else if (elem.kind === "image") {
-    h += range("w","Width",10,900) + range("h","Height",10,900) +
-         range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01) +
-         `<button class="btn ghost small" style="width:100%;margin-top:4px" onclick="document.getElementById('ceImageInput').click()">🔄 Replace image</button>`;
+      range("radius","Radius",80,535) + range("size","Font size",12,180) + color("color","Color") + swatches("color") +
+      chk("bold","Bold") + sel("font","Font",CE_FONTS) + range("opacity","Opacity",0,1,0.01);
+  } else if (el.kind === "freetext" || el.kind === "sticker") {
+    h += text("text", el.kind==="sticker" ? "Emoji / text" : "Text") + range("size","Size",12,360) +
+      color("color","Color") + swatches("color") + chk("bold","Bold") + chk("italic","Italic") +
+      sel("font","Font",CE_FONTS) + sel("align","Align",[{v:"center",l:"Center"},{v:"left",l:"Left"},{v:"right",l:"Right"}]) +
+      color("stroke","Outline") + range("strokeW","Outline width",0,40) +
+      range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01);
+  } else if (el.kind === "line") {
+    h += color("color","Color") + swatches("color") + range("width","Thickness",1,80) + range("opacity","Opacity",0,1,0.01);
+  } else if (el.kind === "ellipse") {
+    h += range("rx","Width",8,540) + range("ry","Height",8,540) + fillCtrls() + shapeExtras();
+  } else if (["rect","triangle","star","heart","shield"].includes(el.kind)) {
+    h += range("w","Width",12,1000) + range("h","Height",12,1000) +
+      (el.kind==="rect" ? range("cornerR","Corner radius",0,300) : "") + fillCtrls() + shapeExtras();
+  } else if (el.kind === "image") {
+    h += range("w","Width",12,1000) + range("h","Height",12,1000) + chk("round","Crop to circle") +
+      range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01) +
+      `<button class="btn ghost small" style="width:100%;margin-top:4px" onclick="document.getElementById('ceImageInput').click()">🔄 Replace image</button>`;
   }
-  el.innerHTML = h;
+  box.innerHTML = h;
 }
 
 function cePropSet(key, val) {
-  const elem = ceElems.find(e => e.id === ceSelectedId);
-  if (!elem) return;
-  elem[key] = val;
-  ceDraw();
-  if (key === "style") ceRenderProps(); // refresh to show/hide color2
+  const el = ceElems.find(e => e.id === ceSelectedId);
+  if (!el) return;
+  el[key] = val;
+  ceDraw(); ceUpdateFloat();
+  // structural prop changes need a panel refresh (show/hide dependent controls)
+  if (key === "fillType" || key === "style" || key === "align") ceRenderProps();
+  if (key === "text") { ceRenderLayers(); }
 }
 
-// ---- save / clear ----
+// commit one undo step per property-editing session
+(function ceWirePropHistory() {
+  const box = document.getElementById("ceProps");
+  if (!box) return;
+  const begin = () => { if (!cePropEditing) { cePropSnap = JSON.stringify(ceElems); cePropEditing = true; } };
+  const end = () => { if (cePropEditing) { if (cePropSnap && JSON.stringify(ceElems) !== cePropSnap) ceHistPush(cePropSnap); cePropEditing = false; } };
+  box.addEventListener("pointerdown", begin);
+  box.addEventListener("focusin", begin);
+  document.addEventListener("pointerup", end);
+  box.addEventListener("change", end);
+  box.addEventListener("focusout", end);
+})();
+
+// ---------- left-panel tabs ----------
+function ceTab(name) {
+  document.querySelectorAll(".ce-rail-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".ce-panel").forEach(p => p.hidden = p.dataset.panel !== name);
+}
+
+// ---------- stickers / shapes / templates content ----------
+const CE_STICKERS = ["⭐","🌟","✨","❤️","🔥","🎉","🎊","🏆","🥇","🎓","🗳️","✊","🙏","👑","💎","🌈","☀️","🌸","🦋","🇺🇸","🇳🇵","🇮🇳","✅","💯","📣","🎯","🕊️","🌹","⚡","💪"];
+const CE_SHAPE_ICONS = {
+  rect:    '<rect x="8" y="20" width="84" height="60" rx="4"/>',
+  rrect:   '<rect x="8" y="20" width="84" height="60" rx="24"/>',
+  ellipse: '<circle cx="50" cy="50" r="40"/>',
+  triangle:'<polygon points="50,10 90,90 10,90"/>',
+  star:    '<polygon points="50,6 61,38 95,38 67,58 78,92 50,70 22,92 33,58 5,38 39,38"/>',
+  heart:   '<path d="M50 86 C-2 48 22 12 50 36 C78 12 102 48 50 86 Z"/>',
+  shield:  '<path d="M14 16 H86 V52 Q86 86 50 94 Q14 86 14 52 Z"/>',
+  line:    '<rect x="8" y="46" width="84" height="8" rx="4"/>',
+};
+function ceInitPanels() {
+  // stickers
+  const sg = document.getElementById("ceStickerGrid");
+  if (sg) sg.innerHTML = CE_STICKERS.map(s => `<button class="ce-sticker-btn" onclick="ceAddSticker('${s}')">${s}</button>`).join("");
+  // shapes
+  const sh = document.getElementById("ceShapeGrid");
+  if (sh) sh.innerHTML = Object.entries(CE_SHAPE_ICONS).map(([k,svg]) =>
+    `<button class="ce-shape-btn" title="${k}" onclick="ceAdd('${k}')"><svg viewBox="0 0 100 100">${svg}</svg></button>`).join("");
+  // templates
+  const tg = document.getElementById("ceTemplateGrid");
+  if (tg) {
+    tg.innerHTML = CE_TEMPLATES.map((t,i) =>
+      `<div class="ce-template-card" onclick="ceLoadTemplate(${i})"><canvas width="120" height="120" data-tpl="${i}"></canvas><span>${t.name}</span></div>`).join("");
+    CE_TEMPLATES.forEach((t,i) => {
+      const cv = tg.querySelector(`canvas[data-tpl="${i}"]`);
+      if (cv) {
+        const c = cv.getContext("2d");
+        c.fillStyle = "#22224a"; c.beginPath(); c.arc(60,60,46,0,Math.PI*2); c.fill();
+        drawCustomElements(c, 120, t.build(), () => { const c2 = cv.getContext("2d"); c2.fillStyle="#22224a"; c2.beginPath(); c2.arc(60,60,46,0,Math.PI*2); c2.fill(); drawCustomElements(c2,120,t.build(),()=>{}); });
+      }
+    });
+  }
+}
+
+// starter templates (return fresh element arrays; ids assigned on load)
+const CE_TEMPLATES = [
+  { name:"Classic Ring", build:() => [
+    { kind:"ring", radius:512, width:70, style:"gradient", color1:"#5b5bf0", color2:"#c026d3", opacity:1 },
+    { kind:"arctext", text:"YOUR NAME", radius:476, size:62, color:"#ffffff", bold:true, font:'"Segoe UI",sans-serif', align:"top", opacity:1 },
+    { kind:"arctext", text:"SUPPORTER", radius:476, size:50, color:"#ffffff", bold:true, font:'"Segoe UI",sans-serif', align:"bottom", opacity:1 },
+  ]},
+  { name:"Vote 2026", build:() => [
+    { kind:"ring", radius:512, width:80, style:"solid", color1:"#e11d48", color2:"#e11d48", opacity:1 },
+    { kind:"rect", x:330, y:846, w:420, h:120, fill:"#e11d48", fillType:"solid", stroke:"#ffffff", strokeW:8, cornerR:60, rotation:0, opacity:1 },
+    { kind:"freetext", text:"VOTE 2026", x:540, y:906, size:74, color:"#ffffff", bold:true, italic:false, font:"Impact,sans-serif", align:"center", stroke:"none", strokeW:0, rotation:0, opacity:1 },
+    { kind:"sticker", text:"🗳️", x:540, y:150, size:150, font:'"Segoe UI Emoji",sans-serif', align:"center", rotation:0, opacity:1 },
+  ]},
+  { name:"Graduate", build:() => [
+    { kind:"ring", radius:512, width:72, style:"gradient", color1:"#b45309", color2:"#fbbf24", opacity:1 },
+    { kind:"arctext", text:"CLASS OF 2026", radius:472, size:58, color:"#fffbeb", bold:true, font:"Georgia,serif", align:"top", opacity:1 },
+    { kind:"sticker", text:"🎓", x:540, y:880, size:150, font:'"Segoe UI Emoji",sans-serif', align:"center", rotation:0, opacity:1 },
+  ]},
+  { name:"Festival", build:() => [
+    { kind:"ring", radius:512, width:66, style:"gradient", color1:"#f43f5e", color2:"#fb923c", opacity:1 },
+    { kind:"arctext", text:"SPRING FEST", radius:476, size:56, color:"#fff7ed", bold:true, font:'"Segoe UI",sans-serif', align:"top", opacity:1 },
+    { kind:"sticker", text:"🌸", x:200, y:300, size:110, font:'"Segoe UI Emoji",sans-serif', align:"center", rotation:0, opacity:1 },
+    { kind:"sticker", text:"🌸", x:880, y:300, size:110, font:'"Segoe UI Emoji",sans-serif', align:"center", rotation:0, opacity:1 },
+  ]},
+  { name:"Bold Mat", build:() => [
+    { kind:"backdrop", holeR:400, fill:"#0ea5e9", fillType:"gradient", fill2:"#1e3a8a", gradAngle:90, opacity:0.95 },
+    { kind:"freetext", text:"#PROUD", x:540, y:930, size:88, color:"#ffffff", bold:true, italic:false, font:"Impact,sans-serif", align:"center", stroke:"none", strokeW:0, rotation:0, opacity:1 },
+  ]},
+  { name:"Badge", build:() => [
+    { kind:"ring", radius:512, width:30, style:"solid", color1:"#fbbf24", color2:"#fbbf24", opacity:1 },
+    { kind:"shield", x:380, y:120, w:320, h:150, fill:"#fbbf24", fillType:"solid", stroke:"none", strokeW:0, rotation:0, opacity:1 },
+    { kind:"freetext", text:"VIP", x:540, y:185, size:80, color:"#1e293b", bold:true, italic:false, font:"Impact,sans-serif", align:"center", stroke:"none", strokeW:0, rotation:0, opacity:1 },
+  ]},
+];
+function ceLoadTemplate(i) {
+  const t = CE_TEMPLATES[i]; if (!t) return;
+  ceCommit();
+  ceElems = t.build().map(spec => ({ id: ceNewId(), ...spec }));
+  ceSelectedId = null;
+  ceAfterChange();
+  if (!document.getElementById("ceName").value.trim()) document.getElementById("ceName").value = t.name;
+  toast(`"${t.name}" loaded — tweak it, then save.`);
+}
+
+// ---------- save / clear ----------
 function ceSave() {
   if (!ceElems.length) { toast("Add at least one element first."); return; }
   const name = (document.getElementById("ceName")?.value || "").trim() || "My Custom Frame";
@@ -1460,20 +1839,21 @@ function ceSave() {
   const frame = { id, name, type: "custom", elements: JSON.parse(JSON.stringify(ceElems)) };
   const frames = loadCustomFrames();
   frames.push(frame);
-  try { saveCustomFrames(frames); } catch { toast("Storage full — try removing some custom frames."); return; }
+  try { saveCustomFrames(frames); } catch { toast("Storage full — remove some custom frames and retry."); return; }
   state.selectedFrameId = id;
-  renderGallery();
-  renderPreview();
-  renderDashboard();
+  renderGallery(); renderPreview(); renderDashboard();
   showView("editor");
   toast(`"${name}" saved and selected — add your photo!`);
 }
-
 function ceClear() {
-  if (ceElems.length && !confirm("Clear all elements?")) return;
+  if (ceElems.length && !confirm("Clear the whole canvas?")) return;
+  ceCommit();
   ceElems = []; ceSelectedId = null;
-  ceDraw(); ceRenderLayers(); ceRenderProps();
+  ceAfterChange();
 }
+
+// build the left-panel content once on load
+ceInitPanels();
 
 // ============================================================
 // ---------- community gallery ----------
@@ -1819,7 +2199,7 @@ function showView(name) {
     b.classList.toggle("active", b.dataset.view === name)
   );
   if (name === "builder")  renderBuilder();
-  if (name === "canvas")   { ceDraw(); ceRenderLayers(); ceRenderProps(); }
+  if (name === "canvas")   { ceDraw(); ceRenderLayers(); ceRenderProps(); ceUpdateFloat(); ceUpdateHist(); }
   if (name === "community") renderCommunity();
   if (name === "dashboard") renderDashboard();
   if (name === "pricing")   loadPayConfig();

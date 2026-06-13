@@ -227,49 +227,105 @@
 <main id="view-canvas" class="view" hidden>
   <div class="ce-layout">
 
+    <!-- left: tabbed content rail -->
+    <nav class="ce-rail">
+      <button class="ce-rail-btn active" data-tab="templates" onclick="ceTab('templates')"><span>🎨</span>Templates</button>
+      <button class="ce-rail-btn" data-tab="elements" onclick="ceTab('elements')"><span>⭕</span>Frame</button>
+      <button class="ce-rail-btn" data-tab="text" onclick="ceTab('text')"><span>T</span>Text</button>
+      <button class="ce-rail-btn" data-tab="shapes" onclick="ceTab('shapes')"><span>▲</span>Shapes</button>
+      <button class="ce-rail-btn" data-tab="stickers" onclick="ceTab('stickers')"><span>⭐</span>Stickers</button>
+      <button class="ce-rail-btn" data-tab="photos" onclick="ceTab('photos')"><span>🖼</span>Photos</button>
+    </nav>
+
     <aside class="ce-left">
-      <div class="ce-section">
-        <h3 class="ce-title">Add Elements</h3>
+      <!-- Templates -->
+      <div class="ce-panel" data-panel="templates">
+        <h3 class="ce-title">Start from a template</h3>
+        <div id="ceTemplateGrid" class="ce-template-grid"></div>
+      </div>
+      <!-- Frame elements -->
+      <div class="ce-panel" data-panel="elements" hidden>
+        <h3 class="ce-title">Frame elements</h3>
         <div class="ce-tool-grid">
           <button class="ce-tool" onclick="ceAdd('ring')"><span class="ce-icon">⭕</span>Ring Border</button>
-          <button class="ce-tool" onclick="ceAdd('arctext',{align:'top'})"><span class="ce-icon">⬆</span>Arc Text Top</button>
-          <button class="ce-tool" onclick="ceAdd('arctext',{align:'bottom'})"><span class="ce-icon">⬇</span>Arc Text Bottom</button>
-          <button class="ce-tool" onclick="ceAdd('freetext')"><span class="ce-icon">T</span>Free Text</button>
-          <button class="ce-tool" onclick="ceAdd('rect')"><span class="ce-icon">▬</span>Rectangle</button>
-          <button class="ce-tool" onclick="ceAdd('ellipse')"><span class="ce-icon">●</span>Circle / Oval</button>
-          <button class="ce-tool" style="grid-column:span 2" onclick="ceAddImage()"><span class="ce-icon">🖼</span>Upload Image / Logo</button>
+          <button class="ce-tool" onclick="ceAdd('backdrop')"><span class="ce-icon">🌗</span>Mat Backdrop</button>
+          <button class="ce-tool" onclick="ceAdd('arctext',{align:'top'})"><span class="ce-icon">⤴</span>Arc Text Top</button>
+          <button class="ce-tool" onclick="ceAdd('arctext',{align:'bottom'})"><span class="ce-icon">⤵</span>Arc Text Bottom</button>
+          <button class="ce-tool" onclick="ceAdd('line')"><span class="ce-icon">／</span>Line</button>
         </div>
-        <input type="file" id="ceImageInput" accept="image/*" hidden>
+        <p class="hint" style="margin-top:10px">The grey circle in the middle is where the user's photo appears. Build your border around it.</p>
       </div>
+      <!-- Text -->
+      <div class="ce-panel" data-panel="text" hidden>
+        <h3 class="ce-title">Add text</h3>
+        <div class="ce-text-list">
+          <button class="ce-text-add ce-h1" onclick="ceAddText('heading')">Add a heading</button>
+          <button class="ce-text-add ce-h2" onclick="ceAddText('subheading')">Add a subheading</button>
+          <button class="ce-text-add ce-h3" onclick="ceAddText('body')">Add body text</button>
+        </div>
+        <h3 class="ce-title" style="margin-top:16px">Curved text</h3>
+        <div class="ce-tool-grid">
+          <button class="ce-tool" onclick="ceAdd('arctext',{align:'top'})"><span class="ce-icon">⤴</span>Top arc</button>
+          <button class="ce-tool" onclick="ceAdd('arctext',{align:'bottom'})"><span class="ce-icon">⤵</span>Bottom arc</button>
+        </div>
+      </div>
+      <!-- Shapes -->
+      <div class="ce-panel" data-panel="shapes" hidden>
+        <h3 class="ce-title">Shapes</h3>
+        <div class="ce-shape-grid" id="ceShapeGrid"></div>
+      </div>
+      <!-- Stickers -->
+      <div class="ce-panel" data-panel="stickers" hidden>
+        <h3 class="ce-title">Stickers &amp; emoji</h3>
+        <div class="ce-sticker-grid" id="ceStickerGrid"></div>
+      </div>
+      <!-- Photos -->
+      <div class="ce-panel" data-panel="photos" hidden>
+        <h3 class="ce-title">Your images</h3>
+        <button class="btn primary" style="width:100%" onclick="ceAddImage()">⬆ Upload image / logo</button>
+        <p class="hint" style="margin-top:10px">PNG with transparency works best for logos. Drag &amp; resize on the canvas after adding.</p>
+        <label class="ce-check-row" style="margin-top:12px"><input type="checkbox" id="ceRoundUpload"> Crop uploads to a circle</label>
+      </div>
+      <input type="file" id="ceImageInput" accept="image/*" hidden>
 
-      <div class="ce-section">
+      <!-- Layers (always visible at bottom of left col) -->
+      <div class="ce-section ce-layers-section">
         <h3 class="ce-title">Layers</h3>
         <div id="ceLayers" class="ce-layers"><p class="hint" style="margin:0">No elements yet</p></div>
       </div>
-
-      <div class="ce-section ce-save-section">
-        <label class="field">Frame name
-          <input type="text" id="ceName" placeholder="My Custom Frame" maxlength="50">
-        </label>
-        <button class="btn primary" style="width:100%" onclick="ceSave()">💾 Save as Frame</button>
-        <button class="btn ghost small" style="width:100%;margin-top:6px" onclick="ceClear()">🗑 Clear All</button>
-      </div>
     </aside>
 
+    <!-- center: toolbar + canvas -->
     <div class="ce-canvas-col">
-      <div class="ce-canvas-wrap">
-        <canvas id="ceCanvas" width="500" height="500"></canvas>
+      <div class="ce-topbar">
+        <button class="ce-tb-btn" id="ceUndo" onclick="ceUndo()" title="Undo (Ctrl+Z)" disabled>↶</button>
+        <button class="ce-tb-btn" id="ceRedo" onclick="ceRedo()" title="Redo (Ctrl+Y)" disabled>↷</button>
+        <span class="ce-tb-sep"></span>
+        <input type="text" id="ceName" class="ce-name-input" placeholder="My Custom Frame" maxlength="50">
+        <span class="ce-tb-spring"></span>
+        <button class="ce-tb-btn ghost-tb" onclick="ceClear()" title="Clear all">🗑</button>
+        <button class="btn primary small" onclick="ceSave()">💾 Save Frame</button>
       </div>
-      <p class="hint" style="text-align:center;margin-top:12px;color:rgba(255,255,255,0.5)">
-        Click to select · Drag to move · <kbd class="ce-kbd">Del</kbd> removes selected
-      </p>
+
+      <div class="ce-stage">
+        <div class="ce-canvas-wrap">
+          <canvas id="ceCanvas" width="520" height="520"></canvas>
+          <!-- floating contextual toolbar for the selected element -->
+          <div id="ceFloat" class="ce-float" hidden>
+            <button onclick="ceDuplicate()" title="Duplicate (Ctrl+D)">⧉</button>
+            <button onclick="ceMoveLayer(1)" title="Bring forward">↑</button>
+            <button onclick="ceMoveLayer(-1)" title="Send backward">↓</button>
+            <button onclick="ceDeleteSelected()" title="Delete (Del)">🗑</button>
+          </div>
+        </div>
+        <p class="ce-help">Drag to move · corner handles resize · top handle rotates · <kbd class="ce-kbd">Ctrl</kbd>+<kbd class="ce-kbd">Z</kbd> undo</p>
+      </div>
     </div>
 
+    <!-- right: properties -->
     <aside class="ce-right">
-      <div class="ce-section">
-        <h3 class="ce-title">Properties</h3>
-        <div id="ceProps"><p class="hint" style="margin:0">Select an element to edit it</p></div>
-      </div>
+      <h3 class="ce-title" style="padding:14px 16px 0">Properties</h3>
+      <div id="ceProps" class="ce-props"><p class="hint" style="margin:0;padding:0 16px">Select an element to edit it</p></div>
     </aside>
 
   </div>
