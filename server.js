@@ -651,10 +651,7 @@ function serveStatic(res, file) {
   fs.readFile(full, (err, buf) => {
     if (err) { res.writeHead(404, secHeaders()); res.end("Not found"); return; }
     const ext = path.extname(file);
-    // JS and CSS are content-addressed by the browser; HTML must revalidate
-    const cacheControl = (ext === ".js" || ext === ".css")
-      ? "public, max-age=3600"
-      : "no-cache";
+    const cacheControl = "no-cache";
     res.writeHead(200, {
       "Content-Type": MIME[ext] || "application/octet-stream",
       "Cache-Control": cacheControl,
