@@ -675,7 +675,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (p.startsWith("/api/") || p === "/health") {
       // rate-limit auth mutation routes
-      if (isRateLimitedRoute(req.method, p) && rateLimit(ip)) {
+      if (isRateLimitedRoute(req.method, p) && rateLimit(ip, 20)) {
         console.warn(`[rate-limit] ${ip} → ${p}`);
         return json(res, 429, { error: "too_many_requests", retryAfter: 60 });
       }
