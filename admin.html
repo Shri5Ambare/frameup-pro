@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FrameUp Admin</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo" onclick="location.href='/'">🖼️ Frame<span>Up</span> <em>ADMIN</em></div>
+  <div class="topbar-right">
+    <a href="/" class="btn small ghost">← Back to app</a>
+    <div class="userchip" id="userChip" hidden>
+      <span class="avatar" id="userAvatar"></span>
+      <span class="uname" id="userName"></span>
+      <button class="btn small ghost" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<main class="view">
+  <div id="adminDenied" class="dash-empty" hidden>
+    <h2>🛠 Admin access required</h2>
+    <p style="margin:14px 0">Log in with an admin account in the main app first.</p>
+    <a class="btn primary" href="/">Go to FrameUp</a>
+  </div>
+
+  <div id="adminPanel" hidden>
+    <h1 class="pricing-title" style="text-align:left">Control Panel</h1>
+    <div class="admin-tabs">
+      <button class="chip selected" data-tab="overview" onclick="showTab('overview')">📊 Overview</button>
+      <button class="chip" data-tab="users" onclick="showTab('users')">👥 Users</button>
+      <button class="chip" data-tab="frames" onclick="showTab('frames')">🖼️ Frames</button>
+      <button class="chip" data-tab="orders" onclick="showTab('orders')">💳 Orders</button>
+      <button class="chip" data-tab="leads" onclick="showTab('leads')">📧 Leads</button>
+    </div>
+
+    <section id="tab-overview">
+      <div class="stat-grid" id="statGrid"></div>
+    </section>
+
+    <section id="tab-users" hidden>
+      <input type="text" id="userSearch" class="admin-search" placeholder="🔍 Search by email or name…">
+      <div class="admin-table-wrap">
+        <table class="admin" id="usersTable"></table>
+      </div>
+    </section>
+
+    <section id="tab-frames" hidden>
+      <div class="admin-table-wrap">
+        <table class="admin" id="framesTable"></table>
+      </div>
+    </section>
+
+    <section id="tab-orders" hidden>
+      <div class="admin-table-wrap">
+        <table class="admin" id="ordersTable"></table>
+      </div>
+    </section>
+
+    <section id="tab-leads" hidden>
+      <div class="admin-table-wrap">
+        <table class="admin" id="leadsTable"></table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/admin.js"></script>
+</body>
+</html>

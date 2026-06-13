@@ -1,0 +1,13 @@
+{
+  "name": "frameup-pro",
+  "version": "1.0.0",
+  "description": "Custom profile frames & social graphics generator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "private": true
+}

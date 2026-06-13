@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FrameUp Pro — Custom Profile Frames & Social Graphics</title>
+<meta name="description" content="Create branded profile frames and social graphics in seconds. No Canva, no Photoshop. Your photo never leaves your device.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+</head>
+<body>
+
+<!-- ============ AUTH (shown until logged in) ============ -->
+<div id="authOverlay" class="auth-overlay" hidden>
+  <div class="auth-hero">
+    <h1>Put your community<br><span>in the picture.</span></h1>
+    <p>FrameUp lets campaigns, colleges, and festivals create branded profile-picture frames their supporters apply in seconds — no design skills needed.</p>
+    <ul>
+      <li>🖼️ Frame Studio with stickers, logos &amp; arc text</li>
+      <li>🌍 Publish to the community gallery &amp; share one link</li>
+      <li>📈 Track downloads and collect supporter emails</li>
+      <li>🔒 Photos never leave the device — only frames are stored</li>
+    </ul>
+  </div>
+  <div class="auth-card">
+    <h2 id="authTitle">Welcome back</h2>
+    <div class="tabs">
+      <button class="tab selected" id="tabLogin" onclick="setAuthMode('login')">Log in</button>
+      <button class="tab" id="tabSignup" onclick="setAuthMode('signup')">Sign up</button>
+    </div>
+    <input type="text" id="authName" placeholder="Your name" hidden>
+    <input type="email" id="authEmail" placeholder="you@email.com" autocomplete="email">
+    <input type="password" id="authPass" placeholder="Password (min 6 characters)" autocomplete="current-password">
+    <div class="auth-error" id="authError"></div>
+    <button class="btn primary big" id="authSubmit" onclick="submitAuth()" style="width:100%">Log in</button>
+    <div class="divider">or</div>
+    <div id="gbtn"></div>
+    <p class="hint" id="googleHint" style="text-align:center"></p>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="logo" onclick="showView('editor')">🖼️ Frame<span>Up</span> <em>PRO</em></div>
+  <nav>
+    <button class="navbtn active" data-view="editor" onclick="showView('editor')">Make My Picture</button>
+    <button class="navbtn" data-view="builder" onclick="showView('builder')">Frame Studio</button>
+    <button class="navbtn" data-view="community" onclick="showView('community')">🌍 Community</button>
+    <button class="navbtn" data-view="dashboard" onclick="showView('dashboard')">My Campaigns</button>
+    <button class="navbtn" data-view="pricing" onclick="showView('pricing')">Pricing</button>
+  </nav>
+  <div class="topbar-right">
+    <div class="pro-badge" id="proBadge" hidden>⭐ PRO</div>
+    <a href="/admin" class="btn small ghost" id="adminLink" hidden>🛠 Admin</a>
+    <div class="userchip" id="userChip" hidden>
+      <span class="avatar" id="userAvatar"></span>
+      <span class="uname" id="userName"></span>
+      <button class="btn small ghost" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ VIEW 1: EDITOR ============ -->
+<main id="view-editor" class="view">
+  <div class="editor-grid">
+
+    <section class="panel">
+      <h2><span class="step">1</span> Your Photo</h2>
+      <div id="dropzone" class="dropzone">
+        <p>📷 Drag a photo here or</p>
+        <button class="btn" onclick="document.getElementById('photoInput').click()">Choose Photo</button>
+        <input type="file" id="photoInput" accept="image/*" hidden>
+        <p class="hint">🔒 Your photo never leaves this device.</p>
+      </div>
+
+      <h2><span class="step">2</span> Pick a Frame</h2>
+      <div id="frameGallery" class="frame-gallery"></div>
+      <button class="btn ghost small" onclick="showView('builder')">+ Create your own frame</button>
+
+      <h2><span class="step">3</span> Adjust Photo</h2>
+      <div class="sliders">
+        <label>Zoom <input type="range" id="zoomSlider" min="0.3" max="4" step="0.01" value="1"></label>
+        <label>Rotate <input type="range" id="rotateSlider" min="-180" max="180" step="1" value="0"></label>
+        <div class="btnrow">
+          <button class="btn ghost small" onclick="flipPhoto()" aria-label="Flip photo horizontally">↔ Flip</button>
+          <button class="btn ghost small" onclick="resetTransform()" aria-label="Reset zoom, rotation and position">Reset</button>
+        </div>
+      </div>
+
+      <h2><span class="step">4</span> Filters</h2>
+      <div class="chiprow" id="filterPresets">
+        <button class="chip selected" data-preset="normal">Normal</button>
+        <button class="chip" data-preset="vivid">Vivid</button>
+        <button class="chip" data-preset="bw">B&amp;W</button>
+        <button class="chip" data-preset="sepia">Sepia</button>
+        <button class="chip" data-preset="cool">Cool</button>
+      </div>
+      <div class="sliders">
+        <label>Brightness <input type="range" id="fBrightness" min="50" max="160" value="100"></label>
+        <label>Contrast <input type="range" id="fContrast" min="50" max="160" value="100"></label>
+        <label>Saturation <input type="range" id="fSaturate" min="0" max="200" value="100"></label>
+      </div>
+
+      <h2><span class="step">5</span> Output Size</h2>
+      <div class="chiprow" id="formatChips"></div>
+    </section>
+
+    <section class="panel preview-panel">
+      <canvas id="previewCanvas" width="1080" height="1080"></canvas>
+      <div class="download-row">
+        <button class="btn primary big" id="downloadBtn" onclick="requestDownload()">⬇ Download HD</button>
+        <button class="btn ghost" onclick="copyImageToClipboard()">📋 Copy image</button>
+        <button class="btn ghost" onclick="copyShareLink()">🔗 Campaign link</button>
+      </div>
+      <p class="hint" id="watermarkNote">Free downloads include a small "made with FrameUp" mark.
+        <a href="#" onclick="showView('pricing');return false;">Remove it →</a></p>
+      <p class="counter" id="usageCounter"></p>
+    </section>
+
+  </div>
+</main>
+
+<!-- ============ VIEW 2: FRAME STUDIO ============ -->
+<main id="view-builder" class="view" hidden>
+  <div class="editor-grid">
+    <section class="panel">
+      <h2>🎨 Frame Studio</h2>
+
+      <label class="field">Frame name
+        <input type="text" id="bName" value="My Campaign 2026" maxlength="40">
+      </label>
+
+      <h3 class="subhead">Ring</h3>
+      <div class="chiprow" id="ringStyleChips">
+        <button class="chip selected" data-ring="gradient">Gradient</button>
+        <button class="chip" data-ring="solid">Solid</button>
+        <button class="chip" data-ring="double">Double</button>
+      </div>
+      <div class="field-row">
+        <label class="field">Color 1 <input type="color" id="bColor1" value="#1d4ed8"></label>
+        <label class="field">Color 2 <input type="color" id="bColor2" value="#dc2626"></label>
+        <label class="field">Width <input type="range" id="bRingWidth" min="20" max="140" value="70"></label>
+      </div>
+      <div class="chiprow" id="patternChips">
+        <button class="chip selected" data-pattern="none">No pattern</button>
+        <button class="chip" data-pattern="dots">Dots</button>
+        <button class="chip" data-pattern="sparkle">Sparkle ✦</button>
+      </div>
+
+      <h3 class="subhead">Text</h3>
+      <label class="field">Top arc text
+        <input type="text" id="bTopText" value="I SUPPORT" maxlength="30">
+      </label>
+      <label class="field">Bottom arc text
+        <input type="text" id="bBottomText" value="OUR TOWN 2026" maxlength="30">
+      </label>
+      <div class="field-row">
+        <label class="field">Font
+          <select id="bFont">
+            <option value='"Segoe UI", sans-serif'>Modern</option>
+            <option value='Georgia, serif'>Classic</option>
+            <option value='Impact, sans-serif'>Bold Impact</option>
+            <option value='"Comic Sans MS", cursive'>Friendly</option>
+            <option value='"Brush Script MT", cursive'>Script</option>
+          </select>
+        </label>
+        <label class="field">Text color <input type="color" id="bTextColor" value="#ffffff"></label>
+      </div>
+
+      <h3 class="subhead">Banner</h3>
+      <div class="field-row">
+        <label class="field"><input type="checkbox" id="bBanner" checked> Show banner</label>
+        <label class="field">Style
+          <select id="bBannerStyle">
+            <option value="pill">Pill</option>
+            <option value="ribbon">Ribbon</option>
+          </select>
+        </label>
+        <label class="field">Text <input type="text" id="bBannerText" value="VOTE" maxlength="16"></label>
+      </div>
+
+      <h3 class="subhead">Stickers <span class="hint-inline">click to add, drag on preview, double-click to remove</span></h3>
+      <div class="chiprow" id="stickerRow"></div>
+
+      <h3 class="subhead">Logo</h3>
+      <div class="field-row">
+        <label class="field">Upload logo (PNG)
+          <input type="file" id="bLogoInput" accept="image/*">
+        </label>
+        <label class="field">Logo size <input type="range" id="bLogoSize" min="60" max="400" value="180"></label>
+        <button class="btn ghost small" onclick="removeLogo()">Remove logo</button>
+      </div>
+
+      <h3 class="subhead">Campaign options</h3>
+      <label class="field"><input type="checkbox" id="bEmailGate"> 📧 Require email before download <span class="tag-pro">PRO</span></label>
+      <p class="hint">Supporters enter their email to download — you collect the list in My Campaigns. Gold for political campaigns and event marketing.</p>
+
+      <div class="divider">— or —</div>
+      <label class="field">Upload a full transparent PNG overlay instead (1080×1080)
+        <input type="file" id="bPngInput" accept="image/png">
+      </label>
+
+      <label class="field">Your name / organization (shown in the community gallery)
+        <input type="text" id="bAuthor" placeholder="e.g. Riverside High School" maxlength="40">
+      </label>
+
+      <div class="builder-actions">
+        <button class="btn primary" onclick="saveBuiltFrame()">💾 Save frame</button>
+        <button class="btn primary" onclick="publishCurrentFrame()">🌍 Publish &amp; share</button>
+        <button class="btn ghost" onclick="copyFrameCampaignLink()">🔗 Campaign link</button>
+        <button class="btn ghost" onclick="showBuilderQR()">📱 QR code</button>
+      </div>
+      <p class="hint">Publishing puts your frame in the public Community gallery and gives you a short share link — downloads and collected emails are tracked on the server.</p>
+    </section>
+
+    <section class="panel preview-panel">
+      <canvas id="builderCanvas" width="1080" height="1080"></canvas>
+      <p class="hint">Live preview — drag stickers &amp; logo directly on the canvas</p>
+    </section>
+  </div>
+</main>
+
+<!-- ============ VIEW: COMMUNITY GALLERY ============ -->
+<main id="view-community" class="view" hidden>
+  <h1 class="pricing-title">🌍 Community Frames</h1>
+  <p class="pricing-sub">Frames published by campaigns, schools, and event organizers everywhere. Pick one and add your photo!</p>
+  <div class="community-bar">
+    <input type="text" id="commSearch" placeholder="🔍 Search frames or creators…">
+    <div class="chiprow">
+      <button class="chip selected" data-sort="popular" id="sortPopular">🔥 Popular</button>
+      <button class="chip" data-sort="recent" id="sortRecent">🕑 Newest</button>
+    </div>
+  </div>
+  <div id="communityGrid" class="community-grid"></div>
+</main>
+
+<!-- ============ VIEW 3: DASHBOARD ============ -->
+<main id="view-dashboard" class="view" hidden>
+  <h1 class="pricing-title">My Campaigns</h1>
+  <p class="pricing-sub">Every frame you create, with reach stats and collected supporter emails.</p>
+  <div id="dashboardContent"></div>
+</main>
+
+<!-- ============ VIEW 4: PRICING ============ -->
+<main id="view-pricing" class="view" hidden>
+  <h1 class="pricing-title">Plans for Organizations</h1>
+  <p class="pricing-sub">Campaigns, colleges, festivals, churches, nonprofits — get your supporters on-brand in minutes.</p>
+
+  <div class="pricing-grid">
+    <div class="price-card">
+      <h3>Free</h3>
+      <div class="price">$0</div>
+      <ul>
+        <li>✅ Unlimited personal use</li>
+        <li>✅ Frame Studio &amp; gallery</li>
+        <li>✅ All export sizes</li>
+        <li>🔸 Small FrameUp watermark</li>
+      </ul>
+      <button class="btn ghost" onclick="showView('editor')">Start free</button>
+    </div>
+
+    <div class="price-card featured">
+      <div class="ribbon">Most popular</div>
+      <h3>Campaign</h3>
+      <div class="price">$25<span>/template · रू3,500</span></div>
+      <ul>
+        <li>✅ We design your custom frame</li>
+        <li>✅ No watermark for supporters</li>
+        <li>✅ Campaign link + QR code</li>
+        <li>✅ Download &amp; reach stats</li>
+        <li>✅ 48-hour turnaround</li>
+      </ul>
+      <button class="btn primary" onclick="orderTemplate('campaign')">Order — $25</button>
+      <button class="btn ghost pay-np" onclick="payNepal('campaign','esewa')">🇳🇵 Pay रू3,500 — eSewa</button>
+    </div>
+
+    <div class="price-card">
+      <h3>Campaign Pro</h3>
+      <div class="price">$50<span>/template · रू7,000</span></div>
+      <ul>
+        <li>✅ Everything in Campaign</li>
+        <li>✅ Email lead capture</li>
+        <li>✅ 3 frame variations (A/B test)</li>
+        <li>✅ Cover photo + story graphics</li>
+        <li>✅ Priority 24-hour turnaround</li>
+      </ul>
+      <button class="btn primary" onclick="orderTemplate('pro')">Order — $50</button>
+      <button class="btn ghost pay-np" onclick="payNepal('campaign_pro','esewa')">🇳🇵 Pay रू7,000 — eSewa</button>
+    </div>
+
+    <div class="price-card">
+      <h3>White-label</h3>
+      <div class="price">$99<span>/mo</span></div>
+      <ul>
+        <li>✅ Your logo, your domain</li>
+        <li>✅ Unlimited frames &amp; campaigns</li>
+        <li>✅ Full analytics + lead exports</li>
+        <li>✅ Perfect for agencies &amp; parties</li>
+      </ul>
+      <button class="btn ghost" onclick="orderTemplate('whitelabel')">Contact us</button>
+    </div>
+  </div>
+
+  <div class="extra-revenue">
+    <h2>More ways this makes money</h2>
+    <div class="rev-grid">
+      <div class="rev-card"><b>🏷️ Featured frames</b><br>Local businesses pay $10/week to pin their frame at the top of the public gallery.</div>
+      <div class="rev-card"><b>📧 Lead capture</b><br>Email-gated downloads build supporter lists — the real product for campaigns.</div>
+      <div class="rev-card"><b>🎓 Season bundles</b><br>Graduation, elections, festivals: 5-frame packs at $99 for schools and committees.</div>
+      <div class="rev-card"><b>🖨️ Print upsell</b><br>One-click buttons, yard signs, stickers via print-on-demand (you keep the margin).</div>
+      <div class="rev-card"><b>🤝 Viral loop</b><br>Every watermarked download is an ad that recruits the next organization.</div>
+      <div class="rev-card"><b>⭐ Pro unlock ($5)</b><br>Individuals pay once to remove the watermark on their own downloads.</div>
+    </div>
+  </div>
+
+  <div class="unlock-box">
+    <h3>🇳🇵 Pay online in Nepal</h3>
+    <p class="hint">Instant checkout — Pro unlock removes the watermark forever. <span id="payMode"></span></p>
+    <div class="btnrow center">
+      <button class="btn primary" onclick="payNepal('pro_unlock','esewa')">eSewa — Pro unlock रू500</button>
+      <button class="btn primary" id="khaltiBtn" onclick="payNepal('pro_unlock','khalti')" hidden>Khalti — रू500</button>
+    </div>
+  </div>
+
+  <div class="unlock-box">
+    <h3>Already purchased? Enter your unlock code</h3>
+    <input type="text" id="unlockInput" placeholder="FRAME-XXXX-XXXX">
+    <button class="btn primary" onclick="tryUnlock()">Unlock Pro</button>
+    <p class="hint">Demo code: <code>FRAME-PRO-2026</code></p>
+  </div>
+</main>
+
+<!-- ============ MODALS ============ -->
+<div id="modalOverlay" class="modal-overlay" hidden>
+  <div class="modal" id="emailModal" hidden>
+    <h3>📧 One quick step</h3>
+    <p class="hint" id="emailModalSub">The creator of this frame asks for your email before download.</p>
+    <input type="text" id="leadName" placeholder="Your name">
+    <input type="email" id="leadEmail" placeholder="you@email.com">
+    <div class="btnrow center">
+      <button class="btn primary" onclick="submitLead()">Continue to download</button>
+      <button class="btn ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+  <div class="modal" id="qrModal" hidden>
+    <h3>📱 Scan to open this campaign</h3>
+    <div id="qrTarget" class="qr-target"></div>
+    <p class="hint">Print this on posters, flyers, and event booths.</p>
+    <div class="btnrow center">
+      <button class="btn ghost" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
