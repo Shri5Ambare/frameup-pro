@@ -362,7 +362,91 @@ function drawFrame(ctx, size, frame, onAsyncReady) {
   } else if (frame.type === "png") {
     const img = getCachedImage("png_" + frame.id, frame.dataUrl, onAsyncReady);
     if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, size, size);
+  } else if (frame.type === "custom") {
+    drawCustomElements(ctx, size, frame.elements || [], onAsyncReady);
   }
+}
+
+// Renders a custom canvas frame. Works at any target size (editor preview or final export).
+function drawCustomElements(ctx, size, elems, onAsync) {
+  const k = size / BASE;
+  ctx.save();
+  ctx.scale(k, k);
+  const C = BASE / 2; // 540 — center of design space
+  for (const el of elems) {
+    ctx.save();
+    ctx.globalAlpha = el.opacity ?? 1;
+    switch (el.kind) {
+      case "ring": {
+        let stroke;
+        if (el.style === "gradient") {
+          const g = ctx.createLinearGradient(0, 0, BASE, BASE);
+          g.addColorStop(0, el.color1); g.addColorStop(1, el.color2);
+          stroke = g;
+        } else { stroke = el.color1; }
+        ctx.beginPath();
+        ctx.arc(C, C, el.radius - el.width / 2, 0, Math.PI * 2);
+        ctx.lineWidth = el.width;
+        ctx.strokeStyle = stroke;
+        if (el.style === "dashed") ctx.setLineDash([el.width * 0.7, el.width * 0.5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        break;
+      }
+      case "arctext":
+        drawArcText(ctx, el.text || "", C, C, el.radius, el.size, el.color, el.font || '"Segoe UI",sans-serif', el.align === "top");
+        break;
+      case "freetext": {
+        ctx.font = `${el.bold ? "bold " : ""}${el.italic ? "italic " : ""}${el.size}px ${el.font || '"Segoe UI",sans-serif'}`;
+        ctx.fillStyle = el.color;
+        ctx.textAlign = el.align || "center";
+        ctx.textBaseline = "middle";
+        ctx.save();
+        ctx.translate(el.x, el.y);
+        if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+        ctx.fillText(el.text || "", 0, 0);
+        ctx.restore();
+        break;
+      }
+      case "rect": {
+        ctx.save();
+        ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
+        if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+        ctx.fillStyle = el.fill;
+        roundRect(ctx, -el.w / 2, -el.h / 2, el.w, el.h, el.cornerR || 0);
+        ctx.fill();
+        if (el.strokeW > 0 && el.stroke && el.stroke !== "none") {
+          ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW; ctx.stroke();
+        }
+        ctx.restore();
+        break;
+      }
+      case "ellipse": {
+        ctx.beginPath();
+        ctx.ellipse(el.cx, el.cy, el.rx, el.ry, 0, 0, Math.PI * 2);
+        ctx.fillStyle = el.fill;
+        ctx.fill();
+        if (el.strokeW > 0 && el.stroke && el.stroke !== "none") {
+          ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeW; ctx.stroke();
+        }
+        break;
+      }
+      case "image": {
+        if (!el.src) break;
+        const img = getCachedImage("ce_" + el.key, el.src, onAsync);
+        if (img.complete && img.naturalWidth) {
+          ctx.save();
+          ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
+          if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+          ctx.drawImage(img, -el.w / 2, -el.h / 2, el.w, el.h);
+          ctx.restore();
+        }
+        break;
+      }
+    }
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 // ---------- photo drawing ----------
@@ -1040,6 +1124,358 @@ async function publishCurrentFrame() {
   }
 }
 
+// ============================================================
+// CANVAS FRAME EDITOR
+// ============================================================
+const CE_BASE = BASE;          // 1080 — design coordinate space
+const CE_SIZE = 500;           // editor canvas display size (px)
+const CE_SCALE = CE_SIZE / CE_BASE; // factor: design → canvas pixels
+
+let ceElems = [];              // array of layer elements
+let ceSelectedId = null;       // id of selected element
+let ceDragState = null;        // drag tracking {elem, startDx, startDy, snap}
+let ceIdCtr = 0;
+function ceNewId() { return "ce" + (++ceIdCtr); }
+
+// Default values for each element kind
+const CE_DEF = {
+  ring:     () => ({ kind:"ring",     radius:490, width:70,  style:"gradient", color1:"#5b5bf0", color2:"#c026d3", opacity:1 }),
+  arctext:  (o) => ({ kind:"arctext", text:"YOUR TEXT HERE", radius:468, size:56, color:"#ffffff", bold:true, font:'"Segoe UI",sans-serif', align:"top",    ...o }),
+  freetext: ()  => ({ kind:"freetext",text:"Your Text", x:540, y:860, size:80, color:"#ffffff", bold:true, italic:false, font:'"Segoe UI",sans-serif', align:"center", rotation:0, opacity:1 }),
+  rect:     ()  => ({ kind:"rect",    x:390, y:850, w:300, h:92, fill:"#5b5bf0", stroke:"none", strokeW:0, cornerR:14, rotation:0, opacity:1 }),
+  ellipse:  ()  => ({ kind:"ellipse", cx:540, cy:200, rx:68, ry:68, fill:"#c026d3", stroke:"none", strokeW:0, opacity:1 }),
+  image:    (o) => ({ kind:"image",   x:490, y:140, w:100, h:100, rotation:0, opacity:1, key:ceNewId(), ...o }),
+};
+
+function ceAdd(kind, overrides = {}) {
+  const def = CE_DEF[kind];
+  if (!def) return;
+  const elem = { id: ceNewId(), ...def(overrides) };
+  ceElems.push(elem);
+  ceSelectedId = elem.id;
+  ceDraw();
+  ceRenderLayers();
+  ceRenderProps();
+}
+
+function ceAddImage() { document.getElementById("ceImageInput").click(); }
+
+document.getElementById("ceImageInput").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const src = reader.result;
+    const existing = ceElems.find(el => el.id === ceSelectedId && el.kind === "image");
+    if (existing) {
+      delete imgCache["ce_" + existing.key];
+      existing.key = ceNewId();
+      existing.src = src;
+      ceDraw();
+    } else {
+      const tmp = new Image();
+      tmp.onload = () => {
+        const ratio = tmp.naturalWidth / tmp.naturalHeight;
+        const w = Math.min(240, tmp.naturalWidth);
+        ceAdd("image", { src, w, h: Math.round(w / ratio), x: CE_BASE / 2 - w / 2, y: 150 });
+      };
+      tmp.src = src;
+    }
+  };
+  reader.readAsDataURL(f);
+  e.target.value = "";
+});
+
+// ---- drawing ----
+const ceCanvas = document.getElementById("ceCanvas");
+const ceCtx = ceCanvas.getContext("2d");
+
+function ceDraw() {
+  const ctx = ceCtx;
+  const S = CE_SIZE;
+  ctx.clearRect(0, 0, S, S);
+
+  // dark background
+  ctx.fillStyle = "#13132a";
+  ctx.fillRect(0, 0, S, S);
+
+  // photo placeholder circle
+  const photoR = (CE_BASE * 0.43) * CE_SCALE;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, photoR, 0, Math.PI * 2);
+  ctx.fillStyle = "#1e1e40";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // face silhouette hint
+  ctx.fillStyle = "rgba(255,255,255,0.07)";
+  ctx.font = `${Math.round(photoR * 0.65)}px serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("👤", S / 2, S / 2);
+
+  // frame elements
+  drawCustomElements(ceCtx, S, ceElems, ceDraw);
+
+  // selection indicators (drawn in canvas-pixel space, no scale)
+  if (ceSelectedId) {
+    const elem = ceElems.find(e => e.id === ceSelectedId);
+    if (elem) ceDrawSelection(elem);
+  }
+}
+
+function ceDrawSelection(el) {
+  const ctx = ceCtx;
+  const s = CE_SCALE;
+  const C = CE_SIZE / 2; // 250
+
+  ctx.save();
+  ctx.strokeStyle = "#5b5bf0";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 4]);
+
+  if (el.kind === "ring") {
+    ctx.beginPath();
+    ctx.arc(C, C, (el.radius - el.width) * s, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(C, C, el.radius * s, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (el.kind === "arctext") {
+    ctx.beginPath();
+    ctx.arc(C, C, (el.radius - el.size * 0.6) * s, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(C, C, (el.radius + el.size * 0.6) * s, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (el.kind === "freetext") {
+    const approxW = (el.text.length || 1) * el.size * 0.55 * s;
+    const approxH = el.size * 1.3 * s;
+    ctx.strokeRect(el.x * s - approxW / 2, el.y * s - approxH / 2, approxW, approxH);
+  } else if (el.kind === "rect") {
+    ctx.strokeRect(el.x * s, el.y * s, el.w * s, el.h * s);
+    // corner handles
+    [[0,0],[1,0],[0,1],[1,1]].forEach(([hx,hy]) => {
+      ctx.fillStyle = "#fff";
+      ctx.setLineDash([]);
+      ctx.fillRect(el.x * s + hx * el.w * s - 4, el.y * s + hy * el.h * s - 4, 8, 8);
+    });
+  } else if (el.kind === "ellipse") {
+    ctx.setLineDash([5,4]);
+    ctx.beginPath();
+    ctx.ellipse(el.cx * s, el.cy * s, el.rx * s, el.ry * s, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (el.kind === "image") {
+    ctx.strokeRect(el.x * s, el.y * s, el.w * s, el.h * s);
+    [[0,0],[1,0],[0,1],[1,1]].forEach(([hx,hy]) => {
+      ctx.fillStyle = "#fff";
+      ctx.setLineDash([]);
+      ctx.fillRect(el.x * s + hx * el.w * s - 4, el.y * s + hy * el.h * s - 4, 8, 8);
+    });
+  }
+  ctx.restore();
+}
+
+// ---- hit testing ----
+function cePt(e) {
+  const r = ceCanvas.getBoundingClientRect();
+  const cx = (e.clientX - r.left) * (CE_SIZE / r.width);
+  const cy = (e.clientY - r.top)  * (CE_SIZE / r.height);
+  return { cx, cy, dx: cx / CE_SCALE, dy: cy / CE_SCALE };
+}
+
+function ceHit(dx, dy) {
+  const C = CE_BASE / 2;
+  for (let i = ceElems.length - 1; i >= 0; i--) {
+    const el = ceElems[i];
+    const dist = Math.hypot(dx - C, dy - C);
+    if (el.kind === "ring") {
+      if (dist >= el.radius - el.width && dist <= el.radius) return el;
+    } else if (el.kind === "arctext") {
+      if (Math.abs(dist - el.radius) < el.size) return el;
+    } else if (el.kind === "freetext") {
+      const hw = (el.text.length || 1) * el.size * 0.55;
+      if (Math.abs(dx - el.x) < hw && Math.abs(dy - el.y) < el.size * 0.7) return el;
+    } else if (el.kind === "rect") {
+      if (dx >= el.x && dx <= el.x + el.w && dy >= el.y && dy <= el.y + el.h) return el;
+    } else if (el.kind === "ellipse") {
+      if (((dx - el.cx) / el.rx) ** 2 + ((dy - el.cy) / el.ry) ** 2 <= 1) return el;
+    } else if (el.kind === "image") {
+      if (dx >= el.x && dx <= el.x + el.w && dy >= el.y && dy <= el.y + el.h) return el;
+    }
+  }
+  return null;
+}
+
+// ---- mouse / touch events ----
+ceCanvas.addEventListener("pointerdown", e => {
+  const { cx, cy, dx, dy } = cePt(e);
+  const hit = ceHit(dx, dy);
+  ceSelectedId = hit ? hit.id : null;
+  if (hit) {
+    ceCanvas.setPointerCapture(e.pointerId);
+    ceDragState = { elem: hit, startDx: dx, startDy: dy, orig: JSON.parse(JSON.stringify(hit)) };
+  }
+  ceDraw();
+  ceRenderLayers();
+  ceRenderProps();
+});
+
+ceCanvas.addEventListener("pointermove", e => {
+  if (!ceDragState) return;
+  const { dx, dy } = cePt(e);
+  const ddx = dx - ceDragState.startDx;
+  const ddy = dy - ceDragState.startDy;
+  const el = ceDragState.elem;
+  const orig = ceDragState.orig;
+  switch (el.kind) {
+    case "freetext": el.x = orig.x + ddx; el.y = orig.y + ddy; break;
+    case "rect":     el.x = orig.x + ddx; el.y = orig.y + ddy; break;
+    case "ellipse":  el.cx = orig.cx + ddx; el.cy = orig.cy + ddy; break;
+    case "image":    el.x = orig.x + ddx; el.y = orig.y + ddy; break;
+    case "ring":     el.radius = Math.max(50, Math.min(540, orig.radius - ddy)); break;
+    case "arctext":  el.radius = Math.max(50, Math.min(540, orig.radius - ddy)); break;
+  }
+  ceDraw();
+});
+
+ceCanvas.addEventListener("pointerup", () => { ceDragState = null; });
+
+document.addEventListener("keydown", e => {
+  if (document.getElementById("view-canvas").hidden) return;
+  if (["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)) return;
+  if (e.key === "Delete" || e.key === "Backspace") ceDeleteSelected();
+  if (e.key === "ArrowUp"    && ceSelectedId) { ceMoveLayer(1); }
+  if (e.key === "ArrowDown"  && ceSelectedId) { ceMoveLayer(-1); }
+});
+
+// ---- layers panel ----
+const CE_LABELS = { ring:"⭕ Ring", arctext:"⬆ Arc Text", freetext:"✏️ Text", rect:"▬ Rect", ellipse:"● Circle", image:"🖼 Image" };
+
+function ceRenderLayers() {
+  const el = document.getElementById("ceLayers");
+  if (!el) return;
+  if (!ceElems.length) { el.innerHTML = '<p class="hint" style="margin:0">No elements yet</p>'; return; }
+  el.innerHTML = [...ceElems].reverse().map((elem, ri) => {
+    const idx = ceElems.length - 1 - ri;
+    return `<div class="ce-layer${elem.id === ceSelectedId ? " selected" : ""}" onclick="ceSelectLayer('${elem.id}')">
+      <span>${CE_LABELS[elem.kind] || elem.kind}</span>
+      <div class="ce-layer-btns">
+        ${idx < ceElems.length - 1 ? `<button onclick="ceMoveLayerIdx(${idx},1);event.stopPropagation()" title="Up">↑</button>` : ""}
+        ${idx > 0 ? `<button onclick="ceMoveLayerIdx(${idx},-1);event.stopPropagation()" title="Down">↓</button>` : ""}
+        <button onclick="ceRemoveLayer('${elem.id}');event.stopPropagation()" title="Delete">✕</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function ceSelectLayer(id) {
+  ceSelectedId = id; ceDraw(); ceRenderLayers(); ceRenderProps();
+}
+function ceMoveLayerIdx(idx, dir) {
+  const ni = idx + dir;
+  if (ni < 0 || ni >= ceElems.length) return;
+  [ceElems[idx], ceElems[ni]] = [ceElems[ni], ceElems[idx]];
+  ceRenderLayers(); ceDraw();
+}
+function ceMoveLayer(dir) {
+  const idx = ceElems.findIndex(e => e.id === ceSelectedId);
+  if (idx === -1) return;
+  ceMoveLayerIdx(idx, dir);
+}
+function ceRemoveLayer(id) {
+  ceElems = ceElems.filter(e => e.id !== id);
+  if (ceSelectedId === id) ceSelectedId = null;
+  ceDraw(); ceRenderLayers(); ceRenderProps();
+}
+function ceDeleteSelected() { if (ceSelectedId) ceRemoveLayer(ceSelectedId); }
+
+// ---- properties panel ----
+function ceRenderProps() {
+  const el = document.getElementById("ceProps");
+  if (!el) return;
+  const elem = ceElems.find(e => e.id === ceSelectedId);
+  if (!elem) { el.innerHTML = '<p class="hint" style="margin:0">Select an element to edit it</p>'; return; }
+
+  // helpers that emit form controls; oninput calls cePropSet
+  const lbl   = (txt) => `<span style="font-size:0.78rem;color:var(--muted)">${txt}</span>`;
+  const color  = (k, l)      => `<label class="field" style="flex-direction:row;align-items:center;justify-content:space-between;gap:8px">${lbl(l)}<input type="color" value="${elem[k]||"#ffffff"}" oninput="cePropSet('${k}',this.value)"></label>`;
+  const range  = (k, l, mn, mx, step=1) => `<label class="field">${lbl(l)}<div class="ce-range-row"><input type="range" min="${mn}" max="${mx}" step="${step}" value="${elem[k]??0}" oninput="cePropSet('${k}',+this.value);this.nextSibling.textContent=this.value"><span class="ce-range-val">${elem[k]??0}</span></div></label>`;
+  const text   = (k, l)      => `<label class="field">${lbl(l)}<input type="text" value="${(elem[k]||"").replace(/"/g,"&quot;")}" oninput="cePropSet('${k}',this.value)"></label>`;
+  const sel    = (k, l, opts)=> `<label class="field">${lbl(l)}<select onchange="cePropSet('${k}',this.value)">${opts.map(o=>`<option value="${o.v}"${elem[k]===o.v?" selected":""}>${o.l}</option>`).join("")}</select></label>`;
+  const chk    = (k, l)      => `<label class="ce-check-row"><input type="checkbox" ${elem[k]?"checked":""} onchange="cePropSet('${k}',this.checked)"> ${l}</label>`;
+
+  const FONTS = [{v:'"Segoe UI",sans-serif',l:"Segoe UI"},{v:"Arial,sans-serif",l:"Arial"},{v:"Georgia,serif",l:"Georgia"},{v:'"Courier New",monospace',l:"Courier"},{v:'"Times New Roman",serif',l:"Times New Roman"}];
+
+  let h = `<div class="ce-prop-head"><b>${{ring:"Ring Border",arctext:"Arc Text",freetext:"Free Text",rect:"Rectangle",ellipse:"Circle/Oval",image:"Image"}[elem.kind]||elem.kind}</b><button class="btn danger small" onclick="ceDeleteSelected()" style="padding:3px 10px;font-size:0.75rem">🗑</button></div>`;
+
+  if (elem.kind === "ring") {
+    h += range("radius","Radius",60,535) + range("width","Thickness",4,220) +
+         sel("style","Style",[{v:"gradient",l:"Gradient"},{v:"solid",l:"Solid"},{v:"dashed",l:"Dashed"}]) +
+         color("color1","Color 1") + (elem.style!=="solid" ? color("color2","Color 2") : "") +
+         range("opacity","Opacity",0,1,0.01);
+  } else if (elem.kind === "arctext") {
+    h += text("text","Text") + sel("align","Position",[{v:"top",l:"Top arc"},{v:"bottom",l:"Bottom arc"}]) +
+         range("radius","Radius",60,535) + range("size","Font size",10,160) +
+         color("color","Color") + chk("bold","Bold") + sel("font","Font",FONTS);
+  } else if (elem.kind === "freetext") {
+    h += text("text","Text") + range("size","Font size",10,220) + color("color","Color") +
+         chk("bold","Bold") + chk("italic","Italic") + sel("font","Font",FONTS) +
+         sel("align","Align",[{v:"center",l:"Center"},{v:"left",l:"Left"},{v:"right",l:"Right"}]) +
+         range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01);
+  } else if (elem.kind === "rect") {
+    h += range("w","Width",10,900) + range("h","Height",10,900) +
+         color("fill","Fill") + color("stroke","Border color") +
+         range("strokeW","Border width",0,40) + range("cornerR","Corner radius",0,200) +
+         range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01);
+  } else if (elem.kind === "ellipse") {
+    h += range("rx","Radius X",5,540) + range("ry","Radius Y",5,540) +
+         color("fill","Fill") + color("stroke","Border color") +
+         range("strokeW","Border width",0,40) + range("opacity","Opacity",0,1,0.01);
+  } else if (elem.kind === "image") {
+    h += range("w","Width",10,900) + range("h","Height",10,900) +
+         range("rotation","Rotation °",-180,180) + range("opacity","Opacity",0,1,0.01) +
+         `<button class="btn ghost small" style="width:100%;margin-top:4px" onclick="document.getElementById('ceImageInput').click()">🔄 Replace image</button>`;
+  }
+  el.innerHTML = h;
+}
+
+function cePropSet(key, val) {
+  const elem = ceElems.find(e => e.id === ceSelectedId);
+  if (!elem) return;
+  elem[key] = val;
+  ceDraw();
+  if (key === "style") ceRenderProps(); // refresh to show/hide color2
+}
+
+// ---- save / clear ----
+function ceSave() {
+  if (!ceElems.length) { toast("Add at least one element first."); return; }
+  const name = (document.getElementById("ceName")?.value || "").trim() || "My Custom Frame";
+  const id = "cust_" + Date.now().toString(36);
+  const frame = { id, name, type: "custom", elements: JSON.parse(JSON.stringify(ceElems)) };
+  const frames = loadCustomFrames();
+  frames.push(frame);
+  try { saveCustomFrames(frames); } catch { toast("Storage full — try removing some custom frames."); return; }
+  state.selectedFrameId = id;
+  renderGallery();
+  renderPreview();
+  renderDashboard();
+  showView("editor");
+  toast(`"${name}" saved and selected — add your photo!`);
+}
+
+function ceClear() {
+  if (ceElems.length && !confirm("Clear all elements?")) return;
+  ceElems = []; ceSelectedId = null;
+  ceDraw(); ceRenderLayers(); ceRenderProps();
+}
+
+// ============================================================
 // ---------- community gallery ----------
 let commSort = "popular";
 
@@ -1376,16 +1812,17 @@ document.getElementById("modalOverlay").addEventListener("click", e => {
 });
 
 function showView(name) {
-  for (const v of ["editor", "builder", "community", "dashboard", "pricing"]) {
+  for (const v of ["editor", "builder", "canvas", "community", "dashboard", "pricing"]) {
     document.getElementById("view-" + v).hidden = v !== name;
   }
   document.querySelectorAll(".navbtn").forEach(b =>
     b.classList.toggle("active", b.dataset.view === name)
   );
-  if (name === "builder") renderBuilder();
+  if (name === "builder")  renderBuilder();
+  if (name === "canvas")   { ceDraw(); ceRenderLayers(); ceRenderProps(); }
   if (name === "community") renderCommunity();
   if (name === "dashboard") renderDashboard();
-  if (name === "pricing") loadPayConfig();
+  if (name === "pricing")   loadPayConfig();
 }
 
 let toastTimer = null;

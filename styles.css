@@ -736,6 +736,129 @@ table.admin tr:hover td { background: #fafaff; }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+/* ============ CANVAS FRAME EDITOR ============ */
+.ce-layout {
+  display: grid;
+  grid-template-columns: 230px 1fr 256px;
+  height: calc(100vh - 58px);
+  overflow: hidden;
+}
+.ce-left, .ce-right {
+  overflow-y: auto;
+  background: var(--panel);
+}
+.ce-left  { border-right: 1px solid var(--line); }
+.ce-right { border-left: 1px solid var(--line); }
+.ce-canvas-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: #13132a;
+  overflow: auto;
+}
+.ce-canvas-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.07), 0 12px 48px rgba(0,0,0,0.7);
+}
+#ceCanvas { display: block; cursor: crosshair; touch-action: none; }
+.ce-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.ce-section:last-child { border-bottom: none; }
+.ce-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.ce-tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.ce-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+  font-family: inherit;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+  text-align: center;
+  line-height: 1.3;
+}
+.ce-tool:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ce-icon { font-size: 1.1rem; line-height: 1; font-style: normal; font-family: "Segoe UI Emoji", sans-serif; }
+.ce-layers { display: flex; flex-direction: column; gap: 4px; min-height: 32px; }
+.ce-layer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 9px;
+  background: var(--panel2);
+  border: 1.5px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  gap: 4px;
+  transition: border-color 0.1s;
+}
+.ce-layer:hover { border-color: var(--line); }
+.ce-layer.selected { border-color: var(--accent); background: rgba(91,91,240,0.07); }
+.ce-layer-btns { display: flex; gap: 2px; flex-shrink: 0; }
+.ce-layer-btns button {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  color: var(--muted); border-radius: 4px; font-size: 0.78rem; line-height: 1;
+}
+.ce-layer-btns button:hover { background: var(--line); color: var(--text); }
+.ce-save-section { display: flex; flex-direction: column; gap: 8px; }
+.ce-props { display: flex; flex-direction: column; gap: 8px; }
+.ce-prop-head {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;
+}
+.ce-prop-head b { font-size: 0.85rem; }
+#ceProps .field { margin: 0; font-size: 0.8rem; gap: 4px; }
+#ceProps .field label { font-size: 0.78rem; }
+#ceProps input[type=range] { width: 100%; accent-color: var(--accent); }
+#ceProps input[type=color] {
+  width: 40px; height: 28px; padding: 1px 2px; border-radius: 6px;
+  border: 1px solid var(--line); cursor: pointer; background: none;
+}
+#ceProps input[type=text], #ceProps select, #ceProps input[type=number] {
+  width: 100%; box-sizing: border-box; font-size: 0.82rem;
+  padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--text); font-family: inherit;
+}
+#ceProps input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+.ce-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; cursor: pointer; }
+.ce-range-row { display: flex; align-items: center; gap: 8px; }
+.ce-range-row input[type=range] { flex: 1; }
+.ce-range-val { min-width: 32px; font-size: 0.78rem; color: var(--muted); text-align: right; }
+.ce-kbd { background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px; font-size: 0.8rem; font-family: monospace; }
+@media (max-width: 900px) {
+  .ce-layout { grid-template-columns: 200px 1fr; }
+  .ce-right { display: none; }
+}
+@media (max-width: 650px) {
+  .ce-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; height: auto; }
+  .ce-left, .ce-right { max-height: 260px; }
+  .ce-canvas-col { min-height: 340px; }
+  #ceCanvas { width: 300px !important; height: 300px !important; }
+}
+
 /* ---------- accessibility ---------- */
 .btn:focus-visible,
 .chip:focus-visible,

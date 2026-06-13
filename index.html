@@ -47,6 +47,7 @@
   <nav>
     <button class="navbtn active" data-view="editor" onclick="showView('editor')">Make My Picture</button>
     <button class="navbtn" data-view="builder" onclick="showView('builder')">Frame Studio</button>
+    <button class="navbtn" data-view="canvas" onclick="showView('canvas')">✏️ Custom Builder</button>
     <button class="navbtn" data-view="community" onclick="showView('community')">🌍 Community</button>
     <button class="navbtn" data-view="dashboard" onclick="showView('dashboard')">My Campaigns</button>
     <button class="navbtn" data-view="pricing" onclick="showView('pricing')">Pricing</button>
@@ -219,6 +220,58 @@
       <canvas id="builderCanvas" width="1080" height="1080"></canvas>
       <p class="hint">Live preview — drag stickers &amp; logo directly on the canvas</p>
     </section>
+  </div>
+</main>
+
+<!-- ============ VIEW: CANVAS BUILDER ============ -->
+<main id="view-canvas" class="view" hidden>
+  <div class="ce-layout">
+
+    <aside class="ce-left">
+      <div class="ce-section">
+        <h3 class="ce-title">Add Elements</h3>
+        <div class="ce-tool-grid">
+          <button class="ce-tool" onclick="ceAdd('ring')"><span class="ce-icon">⭕</span>Ring Border</button>
+          <button class="ce-tool" onclick="ceAdd('arctext',{align:'top'})"><span class="ce-icon">⬆</span>Arc Text Top</button>
+          <button class="ce-tool" onclick="ceAdd('arctext',{align:'bottom'})"><span class="ce-icon">⬇</span>Arc Text Bottom</button>
+          <button class="ce-tool" onclick="ceAdd('freetext')"><span class="ce-icon">T</span>Free Text</button>
+          <button class="ce-tool" onclick="ceAdd('rect')"><span class="ce-icon">▬</span>Rectangle</button>
+          <button class="ce-tool" onclick="ceAdd('ellipse')"><span class="ce-icon">●</span>Circle / Oval</button>
+          <button class="ce-tool" style="grid-column:span 2" onclick="ceAddImage()"><span class="ce-icon">🖼</span>Upload Image / Logo</button>
+        </div>
+        <input type="file" id="ceImageInput" accept="image/*" hidden>
+      </div>
+
+      <div class="ce-section">
+        <h3 class="ce-title">Layers</h3>
+        <div id="ceLayers" class="ce-layers"><p class="hint" style="margin:0">No elements yet</p></div>
+      </div>
+
+      <div class="ce-section ce-save-section">
+        <label class="field">Frame name
+          <input type="text" id="ceName" placeholder="My Custom Frame" maxlength="50">
+        </label>
+        <button class="btn primary" style="width:100%" onclick="ceSave()">💾 Save as Frame</button>
+        <button class="btn ghost small" style="width:100%;margin-top:6px" onclick="ceClear()">🗑 Clear All</button>
+      </div>
+    </aside>
+
+    <div class="ce-canvas-col">
+      <div class="ce-canvas-wrap">
+        <canvas id="ceCanvas" width="500" height="500"></canvas>
+      </div>
+      <p class="hint" style="text-align:center;margin-top:12px;color:rgba(255,255,255,0.5)">
+        Click to select · Drag to move · <kbd class="ce-kbd">Del</kbd> removes selected
+      </p>
+    </div>
+
+    <aside class="ce-right">
+      <div class="ce-section">
+        <h3 class="ce-title">Properties</h3>
+        <div id="ceProps"><p class="hint" style="margin:0">Select an element to edit it</p></div>
+      </div>
+    </aside>
+
   </div>
 </main>
 
