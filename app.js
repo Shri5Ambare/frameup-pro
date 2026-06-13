@@ -111,7 +111,10 @@ async function submitAuth() {
   const password = document.getElementById("authPass").value;
   const name = document.getElementById("authName").value.trim();
   const errEl = document.getElementById("authError");
+  const btn = document.getElementById("authSubmit");
   errEl.textContent = "";
+  btn.classList.add("loading");
+  btn.textContent = authMode === "login" ? "Logging in…" : "Creating account…";
   try {
     currentUser = await api(authMode === "login" ? "/auth/login" : "/auth/register", {
       method: "POST",
@@ -120,6 +123,8 @@ async function submitAuth() {
     await onAuthed();
   } catch (e) {
     errEl.textContent = AUTH_ERRORS[e.message] || "Something went wrong (" + e.message + ").";
+    btn.classList.remove("loading");
+    btn.textContent = authMode === "login" ? "Log in" : "Create account";
   }
 }
 
