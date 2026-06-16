@@ -130,6 +130,8 @@ async function submitAuth() {
 
 async function onAuthed() {
   document.getElementById("authOverlay").hidden = true;
+  const loginBtn = document.getElementById("loginBtn");
+  if (loginBtn) loginBtn.hidden = true;
   document.getElementById("userChip").hidden = false;
   document.getElementById("userName").textContent = currentUser.name;
   document.getElementById("userAvatar").textContent = (currentUser.name[0] || "?").toUpperCase();
@@ -2234,15 +2236,29 @@ function toast(msg) {
   renderPreview();
   updateCounter();
 
-  // auth gate: every service requires a logged-in account
+  // auth gate — but campaign supporters arriving via a shared QR/link (/f/:id)
+  // get to use the frame WITHOUT an account.
+  const sharedLink = location.pathname.match(/^\/f\/([A-Za-z0-9_-]+)$/);
   if (API_OK) {
     try { currentUser = await api("/auth/me"); } catch { currentUser = null; }
     if (currentUser) await onAuthed();
+    else if (sharedLink) await enterSupporterMode();
     else showAuthOverlay();
   } else {
     toast("Run `node server.js` and open http://localhost:3000 — the app needs its server.");
   }
 })();
+
+// Supporter mode: a logged-out visitor who scanned a campaign QR / opened a share
+// link. Skip the login wall, load the shared frame, and let them add a photo and
+// download. A "Log in" button stays available for when they want their own account.
+async function enterSupporterMode() {
+  document.getElementById("authOverlay").hidden = true;
+  const loginBtn = document.getElementById("loginBtn");
+  if (loginBtn) loginBtn.hidden = false;
+  showView("editor");
+  await loadSharedServerFrame();
+}
 
 // short server links: /f/:id (called after auth)
 async function loadSharedServerFrame() {

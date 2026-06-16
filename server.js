@@ -627,6 +627,11 @@ function isPublicRoute(method, p) {
   if (p.startsWith("/api/auth/")) return true;
   if (p === "/api/pay/config") return true;
   if (p === "/api/pay/esewa/callback" || p === "/api/pay/khalti/callback") return true;
+  // Campaign supporters arrive via a shared QR/link with no account. They must be
+  // able to fetch the frame, count a download, and (for email-gated frames) submit
+  // their email — all without logging in. Owner-only routes stay private below.
+  if (method === "GET" && /^\/api\/frames\/[A-Za-z0-9_-]+$/.test(p)) return true;
+  if (method === "POST" && /^\/api\/frames\/[A-Za-z0-9_-]+\/(download|leads)$/.test(p)) return true;
   return false;
 }
 
