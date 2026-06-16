@@ -2237,14 +2237,21 @@ function toast(msg) {
   renderPreview();
   updateCounter();
 
-  // auth gate — but campaign supporters arriving via a shared QR/link (/f/:id)
-  // get to use the frame WITHOUT an account.
+  // auth gate — but campaign supporters arriving via ANY shared frame get to use
+  // it WITHOUT an account. Two link shapes exist:
+  //   • published frames →  /f/:id           (loaded by loadSharedServerFrame)
+  //   • Frame Studio QR  →  /#f=<encoded>     (already decoded into `shared` above)
   const sharedLink = location.pathname.match(/^\/f\/([A-Za-z0-9_-]+)$/);
+  const isShared = Boolean(sharedLink) || Boolean(shared);
   if (API_OK) {
     try { currentUser = await api("/auth/me"); } catch { currentUser = null; }
     if (currentUser) await onAuthed();
-    else if (sharedLink) await enterSupporterMode();
+    else if (isShared) await enterSupporterMode();
     else showAuthOverlay();
+  } else if (shared) {
+    // No server (file:// preview) but a hash frame is present — still usable offline.
+    document.body.classList.add("supporter-mode");
+    showView("editor");
   } else {
     toast("Run `node server.js` and open http://localhost:3000 — the app needs its server.");
   }
