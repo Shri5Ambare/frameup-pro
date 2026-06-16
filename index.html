@@ -101,33 +101,36 @@
         <input type="file" id="photoInput" accept="image/*" hidden>
         <p class="hint">🔒 Your photo never leaves this device.</p>
       </div>
+      <p class="hint supporter-only">👆 Drag to move · pinch or scroll to zoom — position your photo right on the preview, then download.</p>
 
-      <h2><span class="step">2</span> Pick a Frame</h2>
-      <div id="frameGallery" class="frame-gallery"></div>
-      <button class="btn ghost small" onclick="showView('builder')">+ Create your own frame</button>
+      <div class="supporter-hide">
+        <h2><span class="step">2</span> Pick a Frame</h2>
+        <div id="frameGallery" class="frame-gallery"></div>
+        <button class="btn ghost small" onclick="showView('builder')">+ Create your own frame</button>
 
-      <h2><span class="step">3</span> Adjust Photo</h2>
-      <div class="sliders">
-        <label>Zoom <input type="range" id="zoomSlider" min="0.3" max="4" step="0.01" value="1"></label>
-        <label>Rotate <input type="range" id="rotateSlider" min="-180" max="180" step="1" value="0"></label>
-        <div class="btnrow">
-          <button class="btn ghost small" onclick="flipPhoto()" aria-label="Flip photo horizontally">↔ Flip</button>
-          <button class="btn ghost small" onclick="resetTransform()" aria-label="Reset zoom, rotation and position">Reset</button>
+        <h2><span class="step">3</span> Adjust Photo</h2>
+        <div class="sliders">
+          <label>Zoom <input type="range" id="zoomSlider" min="0.3" max="4" step="0.01" value="1"></label>
+          <label>Rotate <input type="range" id="rotateSlider" min="-180" max="180" step="1" value="0"></label>
+          <div class="btnrow">
+            <button class="btn ghost small" onclick="flipPhoto()" aria-label="Flip photo horizontally">↔ Flip</button>
+            <button class="btn ghost small" onclick="resetTransform()" aria-label="Reset zoom, rotation and position">Reset</button>
+          </div>
         </div>
-      </div>
 
-      <h2><span class="step">4</span> Filters</h2>
-      <div class="chiprow" id="filterPresets">
-        <button class="chip selected" data-preset="normal">Normal</button>
-        <button class="chip" data-preset="vivid">Vivid</button>
-        <button class="chip" data-preset="bw">B&amp;W</button>
-        <button class="chip" data-preset="sepia">Sepia</button>
-        <button class="chip" data-preset="cool">Cool</button>
-      </div>
-      <div class="sliders">
-        <label>Brightness <input type="range" id="fBrightness" min="50" max="160" value="100"></label>
-        <label>Contrast <input type="range" id="fContrast" min="50" max="160" value="100"></label>
-        <label>Saturation <input type="range" id="fSaturate" min="0" max="200" value="100"></label>
+        <h2><span class="step">4</span> Filters</h2>
+        <div class="chiprow" id="filterPresets">
+          <button class="chip selected" data-preset="normal">Normal</button>
+          <button class="chip" data-preset="vivid">Vivid</button>
+          <button class="chip" data-preset="bw">B&amp;W</button>
+          <button class="chip" data-preset="sepia">Sepia</button>
+          <button class="chip" data-preset="cool">Cool</button>
+        </div>
+        <div class="sliders">
+          <label>Brightness <input type="range" id="fBrightness" min="50" max="160" value="100"></label>
+          <label>Contrast <input type="range" id="fContrast" min="50" max="160" value="100"></label>
+          <label>Saturation <input type="range" id="fSaturate" min="0" max="200" value="100"></label>
+        </div>
       </div>
 
       <h2><span class="step">5</span> Output Size</h2>

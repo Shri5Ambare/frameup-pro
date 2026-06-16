@@ -129,6 +129,7 @@ async function submitAuth() {
 }
 
 async function onAuthed() {
+  document.body.classList.remove("supporter-mode");
   document.getElementById("authOverlay").hidden = true;
   const loginBtn = document.getElementById("loginBtn");
   if (loginBtn) loginBtn.hidden = true;
@@ -2253,6 +2254,7 @@ function toast(msg) {
 // link. Skip the login wall, load the shared frame, and let them add a photo and
 // download. A "Log in" button stays available for when they want their own account.
 async function enterSupporterMode() {
+  document.body.classList.add("supporter-mode");
   document.getElementById("authOverlay").hidden = true;
   const loginBtn = document.getElementById("loginBtn");
   if (loginBtn) loginBtn.hidden = false;
